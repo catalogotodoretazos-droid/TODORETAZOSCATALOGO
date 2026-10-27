@@ -24,13 +24,11 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Credenciales requeridas
     const ADMIN_CREDENTIALS = {
       email: 'catalogotodoretazos@gmail.com',
       password: 'Bigotes202512'
     };
 
-    // Datos iniciales si localStorage está vacío
     const INITIAL_PRODUCTS = [
       {
         id: '1',
@@ -72,47 +70,45 @@
 
     const INITIAL_CONFIG = {
       storeName: 'Todo Retazos',
-      whatsapp: '5491112345678',
-      logoUrl: '', 
-      description: 'Venta de telas, saldos y retazos por metro o por kilo.',
-      address: 'Av. Principal 1234, Local 5',
-      hours: 'Lunes a Viernes de 9:00 a 18:00 hs. Sábados de 9:00 a 13:00 hs.',
-      instagram: '@todoretazos',
+      whatsapp: '5492984123456',
+      logoUrl: '',
+      description: 'Venta de telas por metro, kilo y retazos seleccionados.',
+      address: 'Av. Rivadavia 1420, Ciudad de Regina',
+      hours: 'Lun a Vie: 9:00 - 13:00 / 16:30 - 20:00 | Sáb: 9:30 - 13:30',
+      instagram: '@todoretazos_ok',
       facebook: 'TodoRetazosOficial',
       welcomeMessage: '¡Bienvenidos a nuestro catálogo virtual! Consultá disponibilidad y hacé tu pedido por WhatsApp.'
     };
 
     function App() {
-      // Estados Globales
       const [products, setProducts] = useState(() => {
-        const saved = localStorage.getItem('tr_products');
-        return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+        try {
+          const saved = localStorage.getItem('tr_products');
+          return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+        } catch(e) { return INITIAL_PRODUCTS; }
       });
 
       const [config, setConfig] = useState(() => {
-        const saved = localStorage.getItem('tr_config');
-        return saved ? JSON.parse(saved) : INITIAL_CONFIG;
+        try {
+          const saved = localStorage.getItem('tr_config');
+          return saved ? JSON.parse(saved) : INITIAL_CONFIG;
+        } catch(e) { return INITIAL_CONFIG; }
       });
 
       const [cart, setCart] = useState([]);
-      const [view, setView] = useState('catalog'); // 'catalog', 'detail', 'cart', 'admin'
+      const [view, setView] = useState('catalog');
       const [selectedProduct, setSelectedProduct] = useState(null);
       const [isAdmin, setIsAdmin] = useState(false);
 
-      // Filtros
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedCategory, setSelectedCategory] = useState('Todas');
       const [selectedUnit, setSelectedUnit] = useState('Todas');
 
-      // Login Modal / State
       const [loginEmail, setLoginEmail] = useState('');
       const [loginPass, setLoginPass] = useState('');
       const [loginError, setLoginError] = useState('');
-
-      // Importar JSON Masivo State
       const [jsonInput, setJsonInput] = useState('');
 
-      // Formulario Producto (Admin)
       const [productForm, setProductForm] = useState({
         id: '',
         title: '',
@@ -126,67 +122,63 @@
         images: []
       });
 
-      // Persistencia en localStorage
       useEffect(() => {
-        localStorage.setItem('tr_products', JSON.stringify(products));
+        try { localStorage.setItem('tr_products', JSON.stringify(products)); } catch(e) {}
       }, [products]);
 
       useEffect(() => {
-        localStorage.setItem('tr_config', JSON.stringify(config));
+        try { localStorage.setItem('tr_config', JSON.stringify(config)); } catch(e) {}
       }, [config]);
 
       useEffect(() => {
         if (window.lucide) {
           window.lucide.createIcons();
         }
-      });
+      }, [view, products, config]);
 
-      // Manejo de Subida de Imágenes a Base64
       const handleFileUpload = (e, callback) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
         files.forEach(file => {
           const reader = new FileReader();
-          reader.onloadend = () => {
-            callback(reader.result);
-          };
+          reader.onloadend = () => callback(reader.result);
           reader.readAsDataURL(file);
         });
       };
 
-      // Importación Masiva de Productos vía JSON
       const handleBulkJsonImport = (e) => {
         e.preventDefault();
         try {
           const parsed = JSON.parse(jsonInput);
-          if (!Array.isArray(parsed)) {
-            alert('El JSON debe ser un arreglo (array) de productos.');
+          const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
+          
+          if (!Array.isArray(list) || list.length === 0) {
+            alert('El JSON debe ser una lista de productos válida.');
             return;
           }
 
-          const formattedProducts = parsed.map((p, index) => ({
-            id: p.id ? String(p.id) : `${Date.now()}-${index}`,
-            title: p.title || 'Sin título',
-            category: p.category || 'General',
+          const formattedProducts = list.map((p, idx) => ({
+            id: p.id ? String(p.id) : `prod-${Date.now()}-${idx}`,
+            title: p.title || p.name || 'Producto',
+            category: p.category || p.categoryId || 'General',
             unit: p.unit || 'metro',
             price: parseFloat(p.price) || 0,
             stock: p.stock !== undefined ? p.stock : true,
             composition: p.composition || '',
             width: p.width || '',
-            notes: p.notes || '',
+            notes: p.notes || p.description || '',
             images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
           }));
 
           setProducts(prev => [...formattedProducts, ...prev]);
           setJsonInput('');
-          alert(`¡Se importaron ${formattedProducts.length} productos con éxito al catálogo!`);
+          alert(`¡Se importaron ${formattedProducts.length} productos al catálogo!`);
         } catch (err) {
-          alert('Error al procesar el JSON. Verifique la sintaxis.');
+          alert('Error de sintaxis JSON. Revisa el formato.');
         }
       };
 
-      // Autenticación
       const handleLogin = (e) => {
         e.preventDefault();
         if (loginEmail === ADMIN_CREDENTIALS.email && loginPass === ADMIN_CREDENTIALS.password) {
@@ -194,7 +186,7 @@
           setLoginError('');
           setView('admin');
         } else {
-          setLoginError('Credenciales incorrectas. Verifique el usuario y la contraseña.');
+          setLoginError('Credenciales incorrectas.');
         }
       };
 
@@ -203,11 +195,10 @@
         setView('catalog');
       };
 
-      // Gestión de Productos
       const handleSaveProduct = (e) => {
         e.preventDefault();
         if (!productForm.title || !productForm.price) {
-          alert('Por favor complete al menos el título y el precio.');
+          alert('Completa al menos el título y el precio.');
           return;
         }
 
@@ -220,11 +211,11 @@
         if (productForm.id) {
           setProducts(products.map(p => p.id === productForm.id ? formattedProduct : p));
         } else {
-          setProducts([...products, { ...formattedProduct, id: Date.now().toString() }]);
+          setProducts([{ ...formattedProduct, id: Date.now().toString() }, ...products]);
         }
 
         resetProductForm();
-        alert('Producto guardado con éxito.');
+        alert('Producto guardado.');
       };
 
       const handleEditProduct = (prod) => {
@@ -233,7 +224,7 @@
       };
 
       const handleDeleteProduct = (id) => {
-        if (confirm('¿Está seguro de eliminar este producto?')) {
+        if (confirm('¿Eliminar este producto?')) {
           setProducts(products.filter(p => p.id !== id));
         }
       };
@@ -253,20 +244,17 @@
         });
       };
 
-      // Carrito de Compras
       const addToCart = (product, quantity = 1) => {
         setCart(prev => {
           const existing = prev.find(item => item.product.id === product.id);
           if (existing) {
             return prev.map(item =>
-              item.product.id === product.id
-                ? { ...item, quantity: item.quantity + quantity }
-                : item
+              item.product.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
             );
           }
           return [...prev, { product, quantity }];
         });
-        alert(`Se agregó "${product.title}" a tu lista de pedido.`);
+        alert(`Agregado: "${product.title}"`);
       };
 
       const updateCartQuantity = (id, delta) => {
@@ -281,7 +269,7 @@
 
       const sendWhatsAppOrder = () => {
         if (cart.length === 0) return;
-        let message = `Hola *${config.storeName}*, me gustaría consultar por el siguiente pedido:\n\n`;
+        let message = `Hola *${config.storeName}*, quisiera consultar por este pedido:\n\n`;
         let total = 0;
 
         cart.forEach((item, idx) => {
@@ -293,16 +281,13 @@
           message += `   - Subtotal: $${subtotal}\n\n`;
         });
 
-        message += `*Total estimado: $${total}*\n\n¿Tienen disponibilidad para coordinar?`;
-
-        const encoded = encodeURIComponent(message);
-        window.open(`https://wa.me/${config.whatsapp}?text=${encoded}`, '_blank');
+        message += `*Total estimado: $${total}*\n\n¿Tienen stock?`;
+        window.open(`https://wa.me/${config.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
       };
 
-      // Filtrado
       const filteredProducts = products.filter(p => {
         const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              p.composition.toLowerCase().includes(searchTerm.toLowerCase());
+                              (p.composition && p.composition.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesCategory = selectedCategory === 'Todas' || p.category === selectedCategory;
         const matchesUnit = selectedUnit === 'Todas' || p.unit === selectedUnit;
         return matchesSearch && matchesCategory && matchesUnit;
@@ -311,51 +296,50 @@
       const categories = ['Todas', ...new Set(products.map(p => p.category))];
 
       return (
-        <div class="min-h-screen flex flex-col justify-between">
-          {/* HEADER */}
-          <header class="bg-amber-800 text-white shadow-md sticky top-0 z-50">
-            <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="min-h-screen flex flex-col justify-between">
+          <header className="bg-amber-800 text-white shadow-md sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
               <div 
-                class="flex items-center gap-3 cursor-pointer" 
+                className="flex items-center gap-3 cursor-pointer" 
                 onClick={() => { setView('catalog'); setSelectedProduct(null); }}
               >
                 {config.logoUrl ? (
-                  <img src={config.logoUrl} alt="Logo" class="w-12 h-12 object-cover rounded-full border-2 border-amber-300" />
+                  <img src={config.logoUrl} alt="Logo" className="w-12 h-12 object-cover rounded-full border-2 border-amber-300" />
                 ) : (
-                  <div class="w-12 h-12 bg-amber-700 rounded-full flex items-center justify-center font-bold text-xl border-2 border-amber-300">
+                  <div className="w-12 h-12 bg-amber-700 rounded-full flex items-center justify-center font-bold text-xl border-2 border-amber-300">
                     TR
                   </div>
                 )}
                 <div>
-                  <h1 class="text-xl font-bold tracking-wide">{config.storeName}</h1>
-                  <p class="text-xs text-amber-200 hidden sm:block">{config.description}</p>
+                  <h1 className="text-xl font-bold tracking-wide">{config.storeName}</h1>
+                  <p className="text-xs text-amber-200 hidden sm:block">{config.description}</p>
                 </div>
               </div>
 
-              <div class="flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <button 
                   onClick={() => setView('cart')}
-                  class="relative bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded-lg flex items-center gap-2 transition"
+                  className="relative bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded-lg flex items-center gap-2 transition"
                 >
                   <span>🛒 Pedido</span>
                   {cart.length > 0 && (
-                    <span class="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                       {cart.reduce((a, b) => a + b.quantity, 0)}
                     </span>
                   )}
                 </button>
 
                 {isAdmin ? (
-                  <div class="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <button 
                       onClick={() => setView('admin')}
-                      class="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded-lg text-sm font-semibold transition"
+                      className="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded-lg text-sm font-semibold transition"
                     >
                       Admin
                     </button>
                     <button 
                       onClick={handleLogout}
-                      class="bg-red-700 hover:bg-red-600 px-3 py-2 rounded-lg text-sm transition"
+                      className="bg-red-700 hover:bg-red-600 px-3 py-2 rounded-lg text-sm transition"
                     >
                       Salir
                     </button>
@@ -363,7 +347,7 @@
                 ) : (
                   <button 
                     onClick={() => setView('admin')}
-                    class="text-xs text-amber-200 hover:text-white underline"
+                    className="text-xs text-amber-200 hover:text-white underline"
                   >
                     Acceso Admin
                   </button>
@@ -372,572 +356,8 @@
             </div>
           </header>
 
-          {/* MAIN CONTENT */}
-          <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
-            
-            {/* VISTA: CATALOGO */}
+          <main className="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
             {view === 'catalog' && !selectedProduct && (
               <div>
-                {/* Banner de bienvenida dinámico */}
                 {config.welcomeMessage && (
-                  <div class="bg-amber-50 border-l-4 border-amber-800 p-4 mb-6 rounded-r-xl shadow-xs">
-                    <p class="text-amber-900 text-sm md:text-base font-medium">{config.welcomeMessage}</p>
-                  </div>
-                )}
-
-                {/* Filtros */}
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
-                  <div class="w-full md:w-1/3">
-                    <input 
-                      type="text" 
-                      placeholder="Buscar por nombre o composición..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-800"
-                    />
-                  </div>
-
-                  <div class="flex flex-wrap gap-2 w-full md:w-auto">
-                    <select 
-                      value={selectedCategory} 
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      class="px-3 py-2 border rounded-lg bg-white text-sm"
-                    >
-                      {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? 'Todas las Categorías' : c}</option>)}
-                    </select>
-
-                    <select 
-                      value={selectedUnit} 
-                      onChange={(e) => setSelectedUnit(e.target.value)}
-                      class="px-3 py-2 border rounded-lg bg-white text-sm"
-                    >
-                      <option value="Todas">Todas las Unidades</option>
-                      <option value="metro">Por Metro</option>
-                      <option value="kilo">Por Kilo</option>
-                      <option value="unidad">Por Unidad</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Lista de Productos */}
-                {filteredProducts.length === 0 ? (
-                  <div class="text-center py-12 text-gray-500">
-                    <p class="text-lg">No se encontraron productos en el catálogo.</p>
-                  </div>
-                ) : (
-                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {filteredProducts.map(prod => (
-                      <div key={prod.id} class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition flex flex-col justify-between">
-                        <div>
-                          <div 
-                            class="h-48 bg-gray-200 cursor-pointer overflow-hidden relative"
-                            onClick={() => { setSelectedProduct(prod); setView('detail'); }}
-                          >
-                            <img 
-                              src={prod.images[0] || 'https://via.placeholder.com/400x300'} 
-                              alt={prod.title} 
-                              class="w-full h-full object-cover hover:scale-105 transition duration-300"
-                            />
-                            <span class="absolute top-2 right-2 bg-amber-800 text-white text-xs font-bold px-2 py-1 rounded">
-                              ${prod.price} / {prod.unit}
-                            </span>
-                          </div>
-                          <div class="p-4">
-                            <span class="text-xs text-amber-700 font-semibold uppercase">{prod.category}</span>
-                            <h3 
-                              class="font-bold text-lg text-gray-800 hover:text-amber-800 cursor-pointer mt-1"
-                              onClick={() => { setSelectedProduct(prod); setView('detail'); }}
-                            >
-                              {prod.title}
-                            </h3>
-                            <p class="text-xs text-gray-500 mt-1">{prod.composition || 'Sin información de composición'}</p>
-                          </div>
-                        </div>
-
-                        <div class="p-4 pt-0 flex gap-2">
-                          <button 
-                            onClick={() => { setSelectedProduct(prod); setView('detail'); }}
-                            class="flex-1 border border-amber-800 text-amber-800 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-50 transition"
-                          >
-                            Ver Detalle
-                          </button>
-                          <button 
-                            onClick={() => addToCart(prod, 1)}
-                            class="bg-amber-800 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-900 transition"
-                          >
-                            + 🛒
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VISTA: DETALLE DE PRODUCTO */}
-            {view === 'detail' && selectedProduct && (
-              <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 max-w-4xl mx-auto">
-                <button 
-                  onClick={() => setView('catalog')}
-                  class="mb-4 text-amber-800 hover:underline text-sm font-semibold"
-                >
-                  ← Volver al catálogo
-                </button>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <img 
-                      src={selectedProduct.images[0] || 'https://via.placeholder.com/400x300'} 
-                      alt={selectedProduct.title}
-                      class="w-full h-80 object-cover rounded-xl border border-gray-200"
-                    />
-                  </div>
-
-                  <div class="flex flex-col justify-between">
-                    <div>
-                      <span class="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold uppercase">
-                        {selectedProduct.category}
-                      </span>
-                      <h2 class="text-2xl font-bold text-gray-800 mt-2">{selectedProduct.title}</h2>
-                      <p class="text-3xl font-bold text-amber-800 my-4">
-                        ${selectedProduct.price} <span class="text-sm text-gray-500 font-normal">por {selectedProduct.unit}</span>
-                      </p>
-
-                      <div class="space-y-2 text-sm text-gray-600 border-t border-b py-4 my-4">
-                        <p><strong>Composición:</strong> {selectedProduct.composition || 'N/A'}</p>
-                        <p><strong>Ancho / Rendimiento:</strong> {selectedProduct.width || 'N/A'}</p>
-                        <p><strong>Notas:</strong> {selectedProduct.notes || 'Sin especificaciones adicionales.'}</p>
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={() => addToCart(selectedProduct, 1)}
-                      class="w-full bg-amber-800 hover:bg-amber-900 text-white font-bold py-3 rounded-xl shadow transition"
-                    >
-                      Agregar al Pedido
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* VISTA: CARRITO / PEDIDO */}
-            {view === 'cart' && (
-              <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 max-w-3xl mx-auto">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Tu Lista de Pedido</h2>
-
-                {cart.length === 0 ? (
-                  <div class="text-center py-8 text-gray-500">
-                    <p>No has agregado ningún producto todavía.</p>
-                    <button 
-                      onClick={() => setView('catalog')}
-                      class="mt-4 bg-amber-800 text-white px-4 py-2 rounded-lg font-semibold"
-                    >
-                      Explorar Catálogo
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <div class="divide-y">
-                      {cart.map(item => (
-                        <div key={item.product.id} class="py-4 flex items-center justify-between gap-4">
-                          <div class="flex-1">
-                            <h4 class="font-bold text-gray-800">{item.product.title}</h4>
-                            <p class="text-xs text-gray-500">${item.product.price} por {item.product.unit}</p>
-                          </div>
-
-                          <div class="flex items-center gap-2">
-                            <button 
-                              onClick={() => updateCartQuantity(item.product.id, -1)}
-                              class="w-8 h-8 bg-gray-200 rounded text-lg font-bold"
-                            >-</button>
-                            <span class="w-8 text-center font-semibold">{item.quantity}</span>
-                            <button 
-                              onClick={() => updateCartQuantity(item.product.id, 1)}
-                              class="w-8 h-8 bg-gray-200 rounded text-lg font-bold"
-                            >+</button>
-                          </div>
-
-                          <div class="text-right w-24">
-                            <p class="font-bold text-amber-800">${item.product.price * item.quantity}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div class="border-t pt-4 mt-4 flex justify-between items-center text-lg font-bold">
-                      <span>Total Estimado:</span>
-                      <span class="text-2xl text-amber-800">
-                        ${cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)}
-                      </span>
-                    </div>
-
-                    <div class="mt-6 flex flex-col sm:flex-row gap-3">
-                      <button 
-                        onClick={() => setView('catalog')}
-                        class="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl font-semibold"
-                      >
-                        Seguir Mirando
-                      </button>
-                      <button 
-                        onClick={sendWhatsAppOrder}
-                        class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow flex items-center justify-center gap-2"
-                      >
-                        Enviar Consulta a WhatsApp
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VISTA: PANEL DE ADMINISTRACION */}
-            {view === 'admin' && (
-              <div>
-                {!isAdmin ? (
-                  /* Formulario de Login */
-                  <div class="bg-white p-6 rounded-2xl shadow-md border border-gray-200 max-w-md mx-auto">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Acceso Administrador</h2>
-                    {loginError && <p class="text-red-600 text-sm mb-4 bg-red-50 p-2 rounded">{loginError}</p>}
-                    
-                    <form onSubmit={handleLogin} class="space-y-4">
-                      <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Correo Electrónico</label>
-                        <input 
-                          type="email" 
-                          required 
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          class="w-full border px-3 py-2 rounded-lg"
-                        />
-                      </div>
-                      <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Contraseña</label>
-                        <input 
-                          type="password" 
-                          required 
-                          value={loginPass}
-                          onChange={(e) => setLoginPass(e.target.value)}
-                          class="w-full border px-3 py-2 rounded-lg"
-                        />
-                      </div>
-                      <button 
-                        type="submit" 
-                        class="w-full bg-amber-800 text-white py-2 rounded-lg font-bold hover:bg-amber-900 transition"
-                      >
-                        Ingresar
-                      </button>
-                    </form>
-                  </div>
-                ) : (
-                  /* Panel Admin Activo */
-                  <div class="space-y-8">
-                    
-                    {/* Configuracion e Informacion del Local */}
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                      <h3 class="text-xl font-bold text-gray-800 mb-4">Información del Local y Configuración</h3>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Nombre de la Tienda</label>
-                          <input 
-                            type="text" 
-                            value={config.storeName}
-                            onChange={(e) => setConfig({ ...config, storeName: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">WhatsApp de Pedidos (sin +)</label>
-                          <input 
-                            type="text" 
-                            value={config.whatsapp}
-                            onChange={(e) => setConfig({ ...config, whatsapp: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Dirección Física</label>
-                          <input 
-                            type="text" 
-                            value={config.address}
-                            onChange={(e) => setConfig({ ...config, address: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Horarios de Atención</label>
-                          <input 
-                            type="text" 
-                            value={config.hours}
-                            onChange={(e) => setConfig({ ...config, hours: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Instagram</label>
-                          <input 
-                            type="text" 
-                            value={config.instagram}
-                            onChange={(e) => setConfig({ ...config, instagram: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Facebook</label>
-                          <input 
-                            type="text" 
-                            value={config.facebook}
-                            onChange={(e) => setConfig({ ...config, facebook: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div class="md:col-span-2">
-                          <label class="block text-xs font-semibold uppercase text-gray-500">Mensaje de Bienvenida / Banner</label>
-                          <input 
-                            type="text" 
-                            value={config.welcomeMessage}
-                            onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
-                            class="w-full border p-2 rounded mt-1"
-                          />
-                        </div>
-                        <div class="md:col-span-2">
-                          <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Logo de la Página</label>
-                          <div class="flex items-center gap-4">
-                            {config.logoUrl && (
-                              <img src={config.logoUrl} alt="Logo Prev" class="w-16 h-16 object-cover rounded border" />
-                            )}
-                            <input 
-                              type="file" 
-                              accept="image/*"
-                              onChange={(e) => handleFileUpload(e, (base64) => setConfig({ ...config, logoUrl: base64 }))}
-                              class="text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* IMPORTACION MASIVA JSON */}
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                      <h3 class="text-xl font-bold text-gray-800 mb-2">📥 Importar Archivo o Datos JSON (Masivo)</h3>
-                      <p class="text-xs text-gray-500 mb-4">
-                        Pega aquí un arreglo JSON con la lista de productos para agregarlos masivamente al catálogo. 
-                        Ejemplo: <code class="bg-gray-100 p-1 rounded text-gray-700">[{"title":"Tela X","price":1200,"unit":"metro","category":"Planos"}]</code>
-                      </p>
-                      <form onSubmit={handleBulkJsonImport} class="space-y-3">
-                        <textarea 
-                          rows="4"
-                          placeholder="Pegue su código JSON aquí..."
-                          value={jsonInput}
-                          onChange={(e) => setJsonInput(e.target.value)}
-                          class="w-full border p-3 rounded-lg font-mono text-xs focus:ring-2 focus:ring-amber-800"
-                        ></textarea>
-                        <button 
-                          type="submit" 
-                          class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-sm transition shadow-sm"
-                        >
-                          Cargar Productos Masivos
-                        </button>
-                      </form>
-                    </div>
-
-                    {/* Cargar / Editar Producto Individual */}
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                      <h3 class="text-xl font-bold text-gray-800 mb-4">
-                        {productForm.id ? 'Editar Producto' : 'Agregar Nuevo Producto'}
-                      </h3>
-
-                      <form onSubmit={handleSaveProduct} class="space-y-4">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div class="md:col-span-2">
-                            <label class="block text-xs font-semibold text-gray-600">Título del Producto *</label>
-                            <input 
-                              type="text" 
-                              required 
-                              value={productForm.title}
-                              onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Categoría</label>
-                            <input 
-                              type="text" 
-                              placeholder="Ej: Planos, Puntos, Gabardinas"
-                              value={productForm.category}
-                              onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Precio ($) *</label>
-                            <input 
-                              type="number" 
-                              required 
-                              value={productForm.price}
-                              onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Unidad de Venta</label>
-                            <select 
-                              value={productForm.unit}
-                              onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
-                              class="w-full border p-2 rounded bg-white"
-                            >
-                              <option value="metro">Por Metro</option>
-                              <option value="kilo">Por Kilo</option>
-                              <option value="unidad">Por Unidad</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Ancho / Rendimiento</label>
-                            <input 
-                              type="text" 
-                              value={productForm.width}
-                              onChange={(e) => setProductForm({ ...productForm, width: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Composición</label>
-                            <input 
-                              type="text" 
-                              value={productForm.composition}
-                              onChange={(e) => setProductForm({ ...productForm, composition: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-semibold text-gray-600">Notas / Descripción</label>
-                            <input 
-                              type="text" 
-                              value={productForm.notes}
-                              onChange={(e) => setProductForm({ ...productForm, notes: e.target.value })}
-                              class="w-full border p-2 rounded"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label class="block text-xs font-semibold text-gray-600 mb-1">Subir Imagen del Producto</label>
-                          <input 
-                            type="file" 
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, (base64) => {
-                              setProductForm(prev => ({ ...prev, images: [base64] }));
-                            })}
-                            class="text-sm"
-                          />
-                          {productForm.images.length > 0 && (
-                            <div class="mt-2 flex gap-2">
-                              <img src={productForm.images[0]} alt="Preview" class="w-20 h-20 object-cover rounded border" />
-                            </div>
-                          )}
-                        </div>
-
-                        <div class="flex gap-2 pt-2">
-                          <button 
-                            type="submit" 
-                            class="bg-amber-800 text-white font-bold px-6 py-2 rounded-lg hover:bg-amber-900 transition"
-                          >
-                            {productForm.id ? 'Guardar Cambios' : 'Agregar al Catálogo'}
-                          </button>
-                          {productForm.id && (
-                            <button 
-                              type="button" 
-                              onClick={resetProductForm}
-                              class="border px-4 py-2 rounded-lg font-semibold text-gray-600"
-                            >
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                    </div>
-
-                    {/* Tabla de Productos Existentes */}
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
-                      <h3 class="text-xl font-bold text-gray-800 mb-4">Catálogo Actual ({products.length})</h3>
-                      <table class="w-full text-left border-collapse">
-                        <thead>
-                          <tr class="border-b text-xs text-gray-500 uppercase">
-                            <th class="p-2">Imagen</th>
-                            <th class="p-2">Título</th>
-                            <th class="p-2">Categoría</th>
-                            <th class="p-2">Precio</th>
-                            <th class="p-2">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y text-sm">
-                          {products.map(p => (
-                            <tr key={p.id} class="hover:bg-gray-50">
-                              <td class="p-2">
-                                <img src={p.images[0]} alt="" class="w-12 h-12 object-cover rounded" />
-                              </td>
-                              <td class="p-2 font-semibold text-gray-800">{p.title}</td>
-                              <td class="p-2">{p.category}</td>
-                              <td class="p-2 font-bold text-amber-800">${p.price} / {p.unit}</td>
-                              <td class="p-2 flex gap-2 pt-4">
-                                <button 
-                                  onClick={() => handleEditProduct(p)}
-                                  class="text-blue-600 hover:underline font-semibold"
-                                >
-                                  Editar
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteProduct(p.id)}
-                                  class="text-red-600 hover:underline font-semibold"
-                                >
-                                  Eliminar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                  </div>
-                )}
-              </div>
-            )}
-
-          </main>
-
-          {/* FOOTER CON INFORMACION DEL LOCAL */}
-          <footer class="bg-gray-800 text-gray-300 py-10 border-t mt-12">
-            <div class="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div>
-                <h4 class="text-white font-bold text-lg mb-2">{config.storeName}</h4>
-                <p class="text-sm text-gray-400">{config.description}</p>
-              </div>
-              <div>
-                <h4 class="text-white font-bold text-md mb-2">Información y Contacto</h4>
-                <p class="text-sm mb-1">📍 <strong>Dirección:</strong> {config.address}</p>
-                <p class="text-sm mb-1">🕒 <strong>Horarios:</strong> {config.hours}</p>
-                <p class="text-sm">💬 <strong>WhatsApp:</strong> +{config.whatsapp}</p>
-              </div>
-              <div>
-                <h4 class="text-white font-bold text-md mb-2">Redes Sociales</h4>
-                <p class="text-sm mb-1">Instagram: {config.instagram}</p>
-                <p class="text-sm">Facebook: {config.facebook}</p>
-              </div>
-            </div>
-            <div class="max-w-7xl mx-auto px-4 text-center text-xs text-gray-500 border-t border-gray-700 mt-8 pt-6">
-              <p>© {new Date().getFullYear()} {config.storeName} - Todos los derechos reservados.</p>
-            </div>
-          </footer>
-        </div>
-      );
-    }
-
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
-</body>
-</html>
+                  <div className="bg-amber-50 border-l-4 border-amber-800 p-4 mb-6 rounded-

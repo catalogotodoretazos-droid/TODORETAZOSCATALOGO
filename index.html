@@ -12,12 +12,31 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <!-- Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-purple-50/40 text-slate-800 antialiased font-sans">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
+
+    // --- CREDENCIALES DE FIREBASE CONFIGURADAS ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBscBd2y8N5raZTsrKxikyyc3v4_dW2KBo",
+      authDomain: "catalogotodoretazos-e6b8f.firebaseapp.com",
+      projectId: "catalogotodoretazos-e6b8f",
+      storageBucket: "catalogotodoretazos-e6b8f.firebasestorage.app",
+      messagingSenderId: "525213525334",
+      appId: "1:525213525334:web:942ed8a3c55065ce1f22f7",
+      measurementId: "G-G4NR9KKRH4"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
 
     const ADMIN_EMAIL = 'catalogotodoretazos@gmail.com';
     const ADMIN_PASS = 'Bigotes202512';
@@ -46,18 +65,6 @@
         width: '1.45m',
         notes: 'Excelente caída, fresco y elastizado para mayor confort.',
         images: ['https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&q=80&w=600']
-      },
-      {
-        id: '3',
-        title: 'Retazo Jersey de Algodón Peinado',
-        category: 'Puntos',
-        unit: 'kilo',
-        price: 8900,
-        stock: false,
-        composition: '100% Algodón',
-        width: 'Rendimiento 3mts/kg aprox.',
-        notes: 'Saldo de taller. Variedad de tonos pasteles en la pieza.',
-        images: ['https://images.unsplash.com/photo-1528458876861-544fd1761a91?auto=format&fit=crop&q=80&w=600']
       }
     ];
 
@@ -69,13 +76,10 @@
       address: 'Av. Rivadavia 1420, Villa Regina',
       hours: 'Lun a Vie: 9:00 - 13:00 / 16:30 - 20:00',
       instagram: 'https://instagram.com/todoretazos',
-      instagramUser: '@todoretazos',
       facebook: 'https://facebook.com/TodoRetazosOficial',
-      facebookUser: 'TodoRetazosOficial',
       welcomeMessage: '✨ ¡Bienvenidos a nuestro catálogo virtual! Consultá disponibilidad y realizá tu pedido directamente por WhatsApp.',
       storeImages: [
-        'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1200',
-        'https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?auto=format&fit=crop&q=80&w=1200'
+        'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1200'
       ]
     };
 
@@ -102,22 +106,31 @@
         id: '', title: '', category: 'Planos', unit: 'metro', price: '', stock: true, composition: '', width: '', notes: '', images: []
       });
 
+      // Sincronización en tiempo real con Firestore
       useEffect(() => {
-        try {
-          const savedP = localStorage.getItem('tr_products_v6');
-          if (savedP) setProducts(JSON.parse(savedP));
-          const savedC = localStorage.getItem('tr_config_v6');
-          if (savedC) setConfig(JSON.parse(savedC));
-        } catch(e) {}
+        const unsubProducts = db.collection('products').onSnapshot(snapshot => {
+          const prods = [];
+          snapshot.forEach(doc => prods.push({ id: doc.id, ...doc.data() }));
+          if (prods.length > 0) {
+            setProducts(prods);
+          } else {
+            INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p));
+          }
+        });
+
+        const unsubConfig = db.collection('settings').doc('storeConfig').onSnapshot(doc => {
+          if (doc.exists) {
+            setConfig(doc.data());
+          } else {
+            db.collection('settings').doc('storeConfig').set(INITIAL_CONFIG);
+          }
+        });
+
+        return () => {
+          unsubProducts();
+          unsubConfig();
+        };
       }, []);
-
-      useEffect(() => {
-        try { localStorage.setItem('tr_products_v6', JSON.stringify(products)); } catch(e) {}
-      }, [products]);
-
-      useEffect(() => {
-        try { localStorage.setItem('tr_config_v6', JSON.stringify(config)); } catch(e) {}
-      }, [config]);
 
       useEffect(() => {
         if (!config.storeImages || config.storeImages.length <= 1) return;
@@ -141,26 +154,29 @@
           const parsed = JSON.parse(jsonInput);
           const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
           if (list.length === 0) {
-            alert('El JSON está vacío o no es un formato válido.');
+            alert('El JSON está vacío.');
             return;
           }
-          const formatted = list.map((p, idx) => ({
-            id: String(p.id || Date.now() + idx),
-            title: p.title || p.name || 'Producto',
-            category: p.category || 'General',
-            unit: p.unit || 'metro',
-            price: parseFloat(p.price) || 0,
-            stock: p.stock !== undefined ? Boolean(p.stock) : true,
-            composition: p.composition || '',
-            width: p.width || '',
-            notes: p.notes || p.description || '',
-            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
-          }));
-          setProducts(prev => [...formatted, ...prev]);
+          list.forEach((p, idx) => {
+            const id = String(p.id || Date.now() + idx);
+            const formatted = {
+              id,
+              title: p.title || 'Producto',
+              category: p.category || 'General',
+              unit: p.unit || 'metro',
+              price: parseFloat(p.price) || 0,
+              stock: p.stock !== undefined ? Boolean(p.stock) : true,
+              composition: p.composition || '',
+              width: p.width || '',
+              notes: p.notes || '',
+              images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
+            };
+            db.collection('products').doc(id).set(formatted);
+          });
           setJsonInput('');
-          alert(`¡Se importaron ${formatted.length} productos con éxito!`);
+          alert('¡Productos importados y sincronizados en la nube!');
         } catch(err) {
-          alert('Error al procesar el JSON. Verifica la sintaxis.');
+          alert('Error al procesar el JSON.');
         }
       };
 
@@ -178,21 +194,21 @@
       const handleSaveProduct = (e) => {
         e.preventDefault();
         if (!productForm.title || !productForm.price) {
-          alert('Por favor completa al menos el título y el precio.');
+          alert('Completa el título y el precio.');
           return;
         }
+        const id = productForm.id ? productForm.id : String(Date.now());
         const newProd = {
           ...productForm,
+          id,
           price: parseFloat(productForm.price) || 0,
           images: productForm.images.length > 0 ? productForm.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
         };
-        if (productForm.id) {
-          setProducts(products.map(p => p.id === productForm.id ? newProd : p));
-        } else {
-          setProducts([{ ...newProd, id: String(Date.now()) }, ...products]);
-        }
-        resetProductForm();
-        alert('¡Producto guardado exitosamente!');
+
+        db.collection('products').doc(id).set(newProd).then(() => {
+          resetProductForm();
+          alert('¡Guardado y sincronizado en la nube para todos!');
+        });
       };
 
       const handleEditProduct = (prod) => {
@@ -200,13 +216,13 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
-      const toggleStock = (id) => {
-        setProducts(products.map(p => p.id === id ? { ...p, stock: !p.stock } : p));
+      const toggleStock = (id, currentStock) => {
+        db.collection('products').doc(id).update({ stock: !currentStock });
       };
 
       const handleDeleteProduct = (id) => {
-        if (confirm('¿Estás seguro de eliminar esta tela del catálogo?')) {
-          setProducts(products.filter(p => p.id !== id));
+        if (confirm('¿Eliminar este producto?')) {
+          db.collection('products').doc(id).delete();
         }
       };
 
@@ -217,7 +233,7 @@
       };
 
       const filteredProducts = products.filter(p => {
-        const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || (p.composition && p.composition.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = selectedCategory === 'Todas' || p.category === selectedCategory;
         const matchesUnit = selectedUnit === 'Todas' || p.unit === selectedUnit;
         return matchesSearch && matchesCategory && matchesUnit;
@@ -227,8 +243,6 @@
 
       return (
         <div className="min-h-screen flex flex-col justify-between bg-purple-50/30">
-          
-          {/* HEADER VIOLETA */}
           <header className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-800 text-white shadow-lg sticky top-0 z-50 border-b border-purple-700/50">
             <div className="max-w-7xl mx-auto px-4 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-3 cursor-pointer group" onClick={() => { setView('catalog'); setSelectedProduct(null); }}>
@@ -238,531 +252,175 @@
                   <div className="w-12 h-12 bg-purple-700/80 rounded-full flex items-center justify-center font-bold text-xl border-2 border-purple-300/80 shadow-md">TR</div>
                 )}
                 <div>
-                  <h1 className="text-2xl font-serif tracking-wide group-hover:text-purple-200 transition">{config.storeName}</h1>
+                  <h1 className="text-2xl font-serif tracking-wide">{config.storeName}</h1>
                   <p className="text-xs text-purple-200/80 hidden sm:block">{config.description}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3 md:gap-4">
-                <div className="hidden md:flex items-center gap-2.5 border-r border-purple-700/60 pr-4">
-                  {config.instagram && (
-                    <a href={config.instagram} target="_blank" rel="noopener noreferrer" className="bg-purple-800/60 hover:bg-purple-700/80 px-3 py-1.5 rounded-full text-purple-200 hover:text-white transition text-xs flex items-center gap-1.5 border border-purple-600/40">
-                      📸 <span>Instagram</span>
-                    </a>
-                  )}
-                  {config.facebook && (
-                    <a href={config.facebook} target="_blank" rel="noopener noreferrer" className="bg-purple-800/60 hover:bg-purple-700/80 px-3 py-1.5 rounded-full text-purple-200 hover:text-white transition text-xs flex items-center gap-1.5 border border-purple-600/40">
-                      📘 <span>Facebook</span>
-                    </a>
-                  )}
-                </div>
-
                 <button onClick={() => setView('cart')} className="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded-xl text-sm font-medium shadow-md flex items-center gap-2 transition border border-purple-500/30">
                   <span>🛒 Pedido</span>
-                  {cart.length > 0 && <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-xs">{cart.reduce((a, b) => a + b.quantity, 0)}</span>}
+                  {cart.length > 0 && <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cart.reduce((a, b) => a + b.quantity, 0)}</span>}
                 </button>
 
                 {isAdmin ? (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setView('admin')} className="bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl text-sm font-semibold shadow-md transition">Panel Admin</button>
-                    <button onClick={() => { setIsAdmin(false); setView('catalog'); }} className="bg-rose-700 hover:bg-rose-600 px-3.5 py-2 rounded-xl text-sm font-semibold shadow-md transition">Salir</button>
+                    <button onClick={() => setView('admin')} className="bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl text-sm font-semibold">Panel Admin</button>
+                    <button onClick={() => { setIsAdmin(false); setView('catalog'); }} className="bg-rose-700 hover:bg-rose-600 px-3.5 py-2 rounded-xl text-sm font-semibold">Salir</button>
                   </div>
                 ) : (
-                  <button onClick={() => setView('admin')} className="text-xs text-purple-200 hover:text-white underline transition">Acceso Admin</button>
+                  <button onClick={() => setView('admin')} className="text-xs text-purple-200 hover:text-white underline">Acceso Admin</button>
                 )}
               </div>
             </div>
           </header>
 
-          {/* CONTENIDO PRINCIPAL */}
           <main className="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
             {view === 'catalog' && !selectedProduct && (
               <div>
-                
-                {/* CARRUSEL DE IMÁGENES DEL LOCAL */}
                 {config.storeImages && config.storeImages.length > 0 && (
                   <div className="relative w-full h-64 md:h-96 rounded-3xl overflow-hidden shadow-xl mb-8 border border-purple-200 bg-purple-950">
-                    <img 
-                      src={config.storeImages[currentSlide]} 
-                      alt="Local Físico" 
-                      className="w-full h-full object-cover transition duration-700 ease-in-out"
-                    />
+                    <img src={config.storeImages[currentSlide]} alt="Local" className="w-full h-full object-cover transition duration-700 ease-in-out" />
                     <div className="absolute inset-0 bg-gradient-to-t from-purple-950/80 via-transparent to-transparent flex items-end p-6">
                       <div>
-                        <span className="bg-purple-700 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-md">Nuestro Local</span>
-                        <h2 className="text-white font-serif text-2xl md:text-3xl font-bold mt-2 drop-shadow-md">{config.storeName}</h2>
-                        <p className="text-purple-200 text-xs md:text-sm drop-shadow">{config.address}</p>
+                        <span className="bg-purple-700 text-white text-xs font-bold px-3 py-1 rounded-full uppercase">Nuestro Local</span>
+                        <h2 className="text-white font-serif text-2xl md:text-3xl font-bold mt-2">{config.storeName}</h2>
+                        <p className="text-purple-200 text-xs md:text-sm">{config.address}</p>
                       </div>
                     </div>
-
-                    {config.storeImages.length > 1 && (
-                      <>
-                        <button 
-                          onClick={() => setCurrentSlide(prev => (prev === 0 ? config.storeImages.length - 1 : prev - 1))}
-                          className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white w-10 h-10 rounded-full flex items-center justify-center text-lg transition shadow-md"
-                        >
-                          ‹
-                        </button>
-                        <button 
-                          onClick={() => setCurrentSlide(prev => (prev + 1) % config.storeImages.length)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white w-10 h-10 rounded-full flex items-center justify-center text-lg transition shadow-md"
-                        >
-                          ›
-                        </button>
-
-                        <div className="absolute bottom-4 right-6 flex gap-1.5">
-                          {config.storeImages.map((_, idx) => (
-                            <button 
-                              key={idx} 
-                              onClick={() => setCurrentSlide(idx)}
-                              className={`w-2.5 h-2.5 rounded-full transition ${currentSlide === idx ? 'bg-white w-6' : 'bg-white/50'}`}
-                            ></button>
-                          ))}
-                        </div>
-                      </>
-                    )}
                   </div>
                 )}
 
-                {config.welcomeMessage && (
-                  <div className="bg-purple-100/80 border-l-4 border-purple-700 p-4 mb-8 rounded-r-2xl shadow-xs">
-                    <p className="text-purple-950 text-sm md:text-base font-medium">{config.welcomeMessage}</p>
-                  </div>
-                )}
-
-                {/* Filtros y Buscador */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 mb-8 flex flex-col md:flex-row gap-4 justify-between items-center">
-                  <div className="w-full md:w-1/3 relative">
-                    <input 
-                      type="text" 
-                      placeholder="🔍 Buscar telas..." 
-                      value={searchTerm} 
-                      onChange={e => setSearchTerm(e.target.value)} 
-                      className="w-full px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 shadow-xs"
-                    />
-                  </div>
-
+                  <input type="text" placeholder="🔍 Buscar telas..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-1/3 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" />
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                    <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="px-4 py-2.5 border border-purple-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-purple-600">
+                    <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="px-4 py-2.5 border border-purple-200 rounded-xl bg-white text-sm">
                       {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? 'Todas las Categorías' : c}</option>)}
                     </select>
-                    <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="px-4 py-2.5 border border-purple-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-purple-600">
-                      <option value="Todas">Todas las Unidades</option>
-                      <option value="metro">Por Metro</option>
-                      <option value="kilo">Por Kilo</option>
-                      <option value="unidad">Por Unidad</option>
-                    </select>
                   </div>
                 </div>
 
-                {/* Listado de Productos */}
-                {filteredProducts.length === 0 ? (
-                  <div className="text-center py-16 text-slate-500 bg-white rounded-2xl border border-purple-100">
-                    <p className="text-lg font-medium">No hay telas disponibles en este momento.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {filteredProducts.map(prod => (
-                      <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-purple-100 overflow-hidden hover:shadow-xl transition duration-300 flex flex-col justify-between group">
-                        <div>
-                          <div className="h-52 bg-purple-50 cursor-pointer relative overflow-hidden" onClick={() => { setSelectedProduct(prod); setView('detail'); }}>
-                            <img src={prod.images[0]} alt={prod.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                            <span className="absolute top-3 right-3 bg-purple-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-md">
-                              ${prod.price} / {prod.unit}
-                            </span>
-                            {!prod.stock && (
-                              <span className="absolute top-3 left-3 bg-rose-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-md">
-                                Agotado
-                              </span>
-                            )}
-                          </div>
-                          <div className="p-5">
-                            <span className="text-xs text-purple-800 font-bold uppercase tracking-wider">{prod.category}</span>
-                            <h3 className="font-serif font-bold text-lg text-slate-900 cursor-pointer mt-1 group-hover:text-purple-800 transition" onClick={() => { setSelectedProduct(prod); setView('detail'); }}>
-                              {prod.title}
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-1">{prod.composition || 'Consultar especificaciones'}</p>
-                          </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {filteredProducts.map(prod => (
+                    <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-purple-100 overflow-hidden flex flex-col justify-between group">
+                      <div>
+                        <div className="h-52 bg-purple-50 cursor-pointer relative overflow-hidden" onClick={() => { setSelectedProduct(prod); setView('detail'); }}>
+                          <img src={prod.images[0]} alt={prod.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                          <span className="absolute top-3 right-3 bg-purple-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-md">${prod.price} / {prod.unit}</span>
+                          {!prod.stock && <span className="absolute top-3 left-3 bg-rose-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg">Agotado</span>}
                         </div>
-
-                        <div className="p-5 pt-0 flex gap-2">
-                          <button onClick={() => { setSelectedProduct(prod); setView('detail'); }} className="flex-1 border border-purple-800 text-purple-800 py-2 rounded-xl text-sm font-semibold hover:bg-purple-50 transition">
-                            Ver Detalle
-                          </button>
-                          <button 
-                            disabled={!prod.stock}
-                            onClick={() => { 
-                              setCart(prev => { 
-                                const ext = prev.find(i => i.product.id === prod.id); 
-                                if(ext) return prev.map(i => i.product.id === prod.id ? {...i, quantity: i.quantity+1} : i); 
-                                return [...prev, {product: prod, quantity: 1}]; 
-                              }); 
-                              alert(`Agregado al pedido: ${prod.title}`); 
-                            }} 
-                            className={`px-3.5 py-2 rounded-xl text-sm font-semibold shadow-xs transition ${prod.stock ? 'bg-purple-800 hover:bg-purple-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                          >
-                            + 🛒
-                          </button>
+                        <div className="p-5">
+                          <span className="text-xs text-purple-800 font-bold uppercase">{prod.category}</span>
+                          <h3 className="font-serif font-bold text-lg text-slate-900 cursor-pointer mt-1" onClick={() => { setSelectedProduct(prod); setView('detail'); }}>{prod.title}</h3>
+                          <p className="text-xs text-slate-500 mt-1">{prod.composition}</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div className="p-5 pt-0 flex gap-2">
+                        <button onClick={() => { setSelectedProduct(prod); setView('detail'); }} className="flex-1 border border-purple-800 text-purple-800 py-2 rounded-xl text-sm font-semibold">Ver Detalle</button>
+                        <button disabled={!prod.stock} onClick={() => { setCart([...cart, {product: prod, quantity: 1}]); alert('Agregado al pedido'); }} className={`px-3.5 py-2 rounded-xl text-sm font-semibold ${prod.stock ? 'bg-purple-800 text-white' : 'bg-slate-200 text-slate-400'}`}>+ 🛒</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* VISTA: DETALLE DE PRODUCTO */}
             {view === 'detail' && selectedProduct && (
               <div className="bg-white rounded-3xl shadow-md border border-purple-100 p-8 max-w-4xl mx-auto">
-                <button onClick={() => setView('catalog')} className="mb-6 text-purple-800 hover:underline text-sm font-semibold flex items-center gap-1">
-                  ← Volver al catálogo
-                </button>
+                <button onClick={() => setView('catalog')} className="mb-6 text-purple-800 underline text-sm font-semibold">← Volver</button>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                  <div className="rounded-2xl overflow-hidden shadow-md border border-purple-100 relative">
-                    <img src={selectedProduct.images[0]} alt={selectedProduct.title} className="w-full h-80 object-cover" />
-                    {!selectedProduct.stock && (
-                      <span className="absolute top-4 left-4 bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md">
-                        Sin Stock Disponible
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col justify-between">
-                    <div>
-                      <span className="text-xs bg-purple-100 text-purple-900 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                        {selectedProduct.category}
-                      </span>
-                      <h2 className="text-3xl font-serif font-bold text-slate-900 mt-3">{selectedProduct.title}</h2>
-                      <p className="text-3xl font-bold text-purple-900 my-4">
-                        ${selectedProduct.price} <span className="text-sm font-normal text-slate-500">por {selectedProduct.unit}</span>
-                      </p>
-
-                      <div className="space-y-2.5 text-sm text-slate-600 border-t border-b border-purple-100 py-4 my-4">
-                        <p><strong>Estado:</strong> <span className={selectedProduct.stock ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{selectedProduct.stock ? "Disponible" : "Agotado"}</span></p>
-                        <p><strong>Composición:</strong> {selectedProduct.composition || 'No especificada'}</p>
-                        <p><strong>Ancho / Rendimiento:</strong> {selectedProduct.width || 'No especificado'}</p>
-                        <p><strong>Notas:</strong> {selectedProduct.notes || 'Sin especificaciones.'}</p>
-                      </div>
-                    </div>
-
-                    <button 
-                      disabled={!selectedProduct.stock}
-                      onClick={() => { 
-                        setCart(prev => [...prev, {product: selectedProduct, quantity: 1}]); 
-                        alert('¡Agregado al pedido!'); 
-                      }} 
-                      className={`w-full font-bold py-3.5 rounded-2xl shadow-md transition ${selectedProduct.stock ? 'bg-purple-800 hover:bg-purple-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                    >
-                      {selectedProduct.stock ? 'Agregar al Pedido por WhatsApp' : 'Producto Agotado'}
-                    </button>
+                  <img src={selectedProduct.images[0]} alt="" className="w-full h-80 object-cover rounded-2xl" />
+                  <div>
+                    <h2 className="text-3xl font-serif font-bold">{selectedProduct.title}</h2>
+                    <p className="text-3xl font-bold text-purple-950 my-4">${selectedProduct.price} / {selectedProduct.unit}</p>
+                    <p className="text-sm text-slate-600 mb-2"><strong>Composición:</strong> {selectedProduct.composition}</p>
+                    <p className="text-sm text-slate-600 mb-4"><strong>Notas:</strong> {selectedProduct.notes}</p>
+                    <button disabled={!selectedProduct.stock} onClick={() => { setCart([...cart, {product: selectedProduct, quantity: 1}]); alert('Agregado'); }} className="w-full bg-purple-800 text-white py-3.5 rounded-2xl font-bold">Agregar al Pedido</button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* CARRITO / PEDIDO */}
             {view === 'cart' && (
               <div className="bg-white rounded-3xl shadow-md border border-purple-100 p-8 max-w-2xl mx-auto">
-                <h2 className="text-2xl font-serif font-bold text-slate-900 mb-6 border-b border-purple-100 pb-3">Tu Lista de Pedido</h2>
-                {cart.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-slate-500 mb-4">No hay productos seleccionados todavía.</p>
-                    <button onClick={() => setView('catalog')} className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-semibold text-sm">Explorar Catálogo</button>
-                  </div>
-                ) : (
+                <h2 className="text-2xl font-serif font-bold mb-6">Tu Pedido</h2>
+                {cart.length === 0 ? <p className="text-slate-500">No hay productos.</p> : (
                   <div className="space-y-4">
                     {cart.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center border-b border-purple-50 pb-3 text-sm">
-                        <div>
-                          <p className="font-bold text-slate-900">{item.product.title}</p>
-                          <p className="text-xs text-slate-500">Cantidad: {item.quantity} {item.product.unit}(s)</p>
-                        </div>
-                        <span className="font-bold text-purple-900">${item.product.price * item.quantity}</span>
+                      <div key={idx} className="flex justify-between border-b pb-2 text-sm">
+                        <span>{item.product.title} (x{item.quantity})</span>
+                        <span className="font-bold">${item.product.price * item.quantity}</span>
                       </div>
                     ))}
-                    <div className="pt-4 flex justify-between text-lg font-bold text-slate-900">
-                      <span>Total estimado:</span>
-                      <span className="text-purple-900">${cart.reduce((sum, i) => sum + (i.product.price * i.quantity), 0)}</span>
-                    </div>
                     <button onClick={() => {
-                      let msg = `Hola *${config.storeName}*, me gustaría consultar por este pedido:\n\n`;
-                      cart.forEach((i, idx) => { msg += `${idx+1}. *${i.product.title}* - Cantidad: ${i.quantity} ${i.product.unit}(s) ($${i.product.price * i.quantity})\n`; });
-                      msg += `\n¿Tienen disponibilidad para coordinar?`;
-                      window.open(`https://wa.me/${config.whatsapp.replace(/[^0-9]/g, '')}?text=` + encodeURIComponent(msg), '_blank');
-                    }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-2xl font-bold shadow-md transition flex items-center justify-center gap-2 mt-4">
-                      💬 Enviar Pedido a WhatsApp
-                    </button>
+                      let msg = `Hola *${config.storeName}*, quiero consultar por este pedido:\n\n`;
+                      cart.forEach((i, idx) => { msg += `${idx+1}. *${i.product.title}* - Cantidad: ${i.quantity}\n`; });
+                      window.open(`https://wa.me/${config.whatsapp}?text=` + encodeURIComponent(msg), '_blank');
+                    }} className="w-full bg-emerald-600 text-white py-3.5 rounded-2xl font-bold">Enviar Pedido por WhatsApp</button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* PANEL DE ADMINISTRACION */}
             {view === 'admin' && (
               <div className="max-w-5xl mx-auto space-y-8">
                 {!isAdmin ? (
                   <div className="bg-white p-8 rounded-3xl shadow-md border border-purple-100 max-w-md mx-auto">
-                    <h2 className="text-2xl font-serif font-bold mb-4 text-center text-purple-950">Acceso Administrador</h2>
-                    {loginError && <p className="text-rose-600 text-xs mb-4 bg-rose-50 p-2.5 rounded-xl border border-rose-100">{loginError}</p>}
+                    <h2 className="text-2xl font-serif font-bold mb-4 text-center">Acceso Admin</h2>
+                    {loginError && <p className="text-rose-600 text-xs mb-4">{loginError}</p>}
                     <form onSubmit={handleLogin} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Correo Electrónico</label>
-                        <input type="email" placeholder="Correo" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full border border-purple-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" required />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Contraseña</label>
-                        <input type="password" placeholder="Contraseña" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full border border-purple-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" required />
-                      </div>
-                      <button type="submit" className="w-full bg-purple-800 hover:bg-purple-900 text-white py-3 rounded-xl font-bold text-sm shadow-md transition">Ingresar al Panel</button>
+                      <input type="email" placeholder="Correo" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full border p-3 rounded-xl text-sm" required />
+                      <input type="password" placeholder="Contraseña" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full border p-3 rounded-xl text-sm" required />
+                      <button type="submit" className="w-full bg-purple-800 text-white py-3 rounded-xl font-bold text-sm">Entrar</button>
                     </form>
                   </div>
                 ) : (
                   <div className="space-y-8">
-                    
-                    {/* GESTIÓN DE LOGO Y FOTOS DEL LOCAL */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-6">
-                      <div>
-                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Logo del Local</h3>
-                        <p className="text-xs text-slate-500 mb-3">Sube una imagen desde tu dispositivo para cambiar el logo principal de la cabecera.</p>
-                        <div className="flex items-center gap-4">
-                          {config.logoUrl && (
-                            <img src={config.logoUrl} alt="Logo Actual" className="w-16 h-16 object-cover rounded-full border border-purple-200 shadow-xs" />
-                          )}
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={e => handleFileUpload(e, base64 => setConfig({...config, logoUrl: base64}))} 
-                            className="text-xs text-slate-500" 
-                          />
-                        </div>
-                      </div>
-
-                      <hr className="border-purple-100" />
-
-                      <div>
-                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Fotos del Local Físico (Carrusel de Inicio)</h3>
-                        <p className="text-xs text-slate-500 mb-4">Sube fotos de tu local para que aparezcan en la parte superior del catálogo.</p>
-                        
-                        <div className="flex flex-wrap gap-4 mb-4">
-                          {config.storeImages && config.storeImages.map((img, idx) => (
-                            <div key={idx} className="relative group">
-                              <img src={img} alt="Local" className="w-24 h-24 object-cover rounded-xl border border-purple-200 shadow-xs" />
-                              <button 
-                                onClick={() => {
-                                  const newImgs = config.storeImages.filter((_, i) => i !== idx);
-                                  setConfig({...config, storeImages: newImgs});
-                                }}
-                                className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={e => handleFileUpload(e, base64 => {
-                            const currentImgs = config.storeImages || [];
-                            setConfig({...config, storeImages: [...currentImgs, base64]});
-                          })} 
-                          className="text-xs text-slate-500" 
-                        />
-                      </div>
-                    </div>
-
-                    {/* SECCIÓN 1: EDICIÓN Y GESTIÓN COMPLETA DEL CATÁLOGO */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                        <div>
-                          <h3 className="text-xl font-serif font-bold text-purple-950">📦 Catálogo Cargado ({products.length} productos)</h3>
-                          <p className="text-xs text-slate-500">Modifica, cambia fotos, ajusta stock o elimina cualquier tela del catálogo.</p>
-                        </div>
-                        <button onClick={resetProductForm} className="bg-purple-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-900 transition">
-                          + Nuevo Producto
-                        </button>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-purple-100 text-xs text-slate-400 uppercase">
-                              <th className="p-3">Imagen</th>
-                              <th className="p-3">Título / Categoría</th>
-                              <th className="p-3">Precio</th>
-                              <th className="p-3">Stock</th>
-                              <th className="p-3 text-right">Acciones</th>
+                    <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
+                      <h3 className="text-xl font-bold mb-3">Gestión de Catálogo Nube ({products.length})</h3>
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b text-xs text-slate-400 uppercase">
+                            <th className="p-2">Título</th>
+                            <th className="p-2">Precio</th>
+                            <th className="p-2">Stock</th>
+                            <th className="p-2 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {products.map(p => (
+                            <tr key={p.id}>
+                              <td className="p-2 font-bold">{p.title}</td>
+                              <td className="p-2">${p.price}</td>
+                              <td className="p-2">
+                                <button onClick={() => toggleStock(p.id, p.stock)} className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.stock ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                  {p.stock ? 'En Stock' : 'Agotado'}
+                                </button>
+                              </td>
+                              <td className="p-2 text-right space-x-2">
+                                <button onClick={() => handleEditProduct(p)} className="text-purple-800 font-bold text-xs">Editar</button>
+                                <button onClick={() => handleDeleteProduct(p.id)} className="text-rose-600 font-bold text-xs">Eliminar</button>
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-purple-50 text-sm">
-                            {products.map(p => (
-                              <tr key={p.id} className="hover:bg-purple-50/50 transition">
-                                <td className="p-3">
-                                  <img src={p.images[0]} alt="" className="w-12 h-12 object-cover rounded-xl border border-purple-100" />
-                                </td>
-                                <td className="p-3">
-                                  <p className="font-bold text-slate-900">{p.title}</p>
-                                  <p className="text-xs text-purple-700">{p.category}</p>
-                                </td>
-                                <td className="p-3 font-bold text-purple-900">${p.price} / {p.unit}</td>
-                                <td className="p-3">
-                                  <button 
-                                    onClick={() => toggleStock(p.id)}
-                                    className={`px-3 py-1 rounded-full text-xs font-bold transition ${p.stock ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}
-                                  >
-                                    {p.stock ? 'En Stock' : 'Sin Stock'}
-                                  </button>
-                                </td>
-                                <td className="p-3 text-right space-x-2">
-                                  <button onClick={() => handleEditProduct(p)} className="bg-purple-100 hover:bg-purple-200 text-purple-900 px-3 py-1.5 rounded-lg text-xs font-bold transition">
-                                    Editar
-                                  </button>
-                                  <button onClick={() => handleDeleteProduct(p.id)} className="bg-rose-100 hover:bg-rose-200 text-rose-800 px-3 py-1.5 rounded-lg text-xs font-bold transition">
-                                    Eliminar
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
 
-                    {/* SECCIÓN 2: FORMULARIO DE CREAR / EDITAR PRODUCTO */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-xl font-serif font-bold text-purple-950 mb-4">
-                        {productForm.id ? '✏️ Editar Producto Seleccionado' : '➕ Cargar Nuevo Producto'}
-                      </h3>
-
+                    <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
+                      <h3 className="text-xl font-bold mb-4">{productForm.id ? 'Editar Producto' : 'Nuevo Producto'}</h3>
                       <form onSubmit={handleSaveProduct} className="space-y-4 text-sm">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Título del Producto *</label>
-                            <input type="text" placeholder="Ej: Gabardina 8 Oz" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl focus:ring-2 focus:ring-purple-600" required />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Categoría</label>
-                            <input type="text" placeholder="Ej: Gabardinas, Planos" value={productForm.category} onChange={e => setProductForm({...productForm, category: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl focus:ring-2 focus:ring-purple-600" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Precio ($) *</label>
-                            <input type="number" placeholder="4500" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl focus:ring-2 focus:ring-purple-600" required />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Unidad de Venta</label>
-                            <select value={productForm.unit} onChange={e => setProductForm({...productForm, unit: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl bg-white focus:ring-2 focus:ring-purple-600">
-                              <option value="metro">Por Metro</option>
-                              <option value="kilo">Por Kilo</option>
-                              <option value="unidad">Por Unidad</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Disponibilidad de Stock</label>
-                            <select value={productForm.stock} onChange={e => setProductForm({...productForm, stock: e.target.value === 'true'})} className="w-full border border-purple-200 p-2.5 rounded-xl bg-white focus:ring-2 focus:ring-purple-600">
-                              <option value="true">En Stock (Disponible)</option>
-                              <option value="false">Sin Stock (Agotado)</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Composición</label>
-                            <input type="text" placeholder="Ej: 100% Algodón" value={productForm.composition} onChange={e => setProductForm({...productForm, composition: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl focus:ring-2 focus:ring-purple-600" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Ancho / Rendimiento</label>
-                            <input type="text" placeholder="Ej: 1.50m" value={productForm.width} onChange={e => setProductForm({...productForm, width: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl focus:ring-2 focus:ring-purple-600" />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Subir o Cambiar Imagen</label>
-                          <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => setProductForm({...productForm, images: [base64]}))} className="text-xs text-slate-500" />
-                          {productForm.images.length > 0 && (
-                            <img src={productForm.images[0]} alt="Preview" className="w-20 h-20 object-cover rounded-xl border border-purple-200 mt-2" />
-                          )}
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                          <button type="submit" className="bg-purple-800 hover:bg-purple-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md transition">
-                            {productForm.id ? 'Guardar Cambios' : 'Agregar al Catálogo'}
-                          </button>
-                          {productForm.id && (
-                            <button type="button" onClick={resetProductForm} className="border border-slate-300 px-4 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 transition">
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
+                        <input type="text" placeholder="Título" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
+                        <input type="number" placeholder="Precio" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
+                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => setProductForm({...productForm, images: [base64]}))} className="text-xs" />
+                        <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold">Guardar en la Nube</button>
                       </form>
                     </div>
-
-                    {/* SECCIÓN 3: IMPORTACIÓN MASIVA JSON */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-lg font-serif font-bold text-purple-950 mb-2">📥 Carga Masiva vía JSON</h3>
-                      <p className="text-xs text-slate-500 mb-3">Pega un arreglo en formato JSON con múltiples telas para importarlas al instante.</p>
-                      <form onSubmit={handleBulkJsonImport} className="space-y-3">
-                        <textarea rows="3" placeholder='[{"title":"Tela Ejemplo","price":3000,"unit":"metro","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border border-purple-200 p-3 text-xs font-mono rounded-xl focus:ring-2 focus:ring-purple-600"></textarea>
-                        <button type="submit" className="bg-indigo-700 hover:bg-indigo-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-xs transition">
-                          Importar Productos
-                        </button>
-                      </form>
-                    </div>
-
-                    {/* SECCIÓN 4: INFORMACIÓN DEL LOCAL Y REDES */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-lg font-serif font-bold text-purple-950 mb-4">⚙️ Información del Local y Redes</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">WhatsApp (sin +)</label>
-                          <input type="text" value={config.whatsapp} onChange={e => setConfig({...config, whatsapp: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl mt-1" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">Dirección Física</label>
-                          <input type="text" value={config.address} onChange={e => setConfig({...config, address: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl mt-1" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">Instagram Link</label>
-                          <input type="text" value={config.instagram} onChange={e => setConfig({...config, instagram: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl mt-1" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">Facebook Link</label>
-                          <input type="text" value={config.facebook} onChange={e => setConfig({...config, facebook: e.target.value})} className="w-full border border-purple-200 p-2.5 rounded-xl mt-1" />
-                        </div>
-                      </div>
-                    </div>
-
                   </div>
                 )}
               </div>
             )}
           </main>
-
-          {/* FOOTER */}
-          <footer className="bg-slate-900 text-slate-300 py-12 border-t border-purple-950 mt-16">
-            <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div>
-                <h4 className="text-white font-serif font-bold text-lg mb-2">{config.storeName}</h4>
-                <p className="text-sm text-slate-400">{config.description}</p>
-              </div>
-              <div>
-                <h4 className="text-purple-300 font-bold text-xs uppercase tracking-wider mb-3">Ubicación y Atención</h4>
-                <p className="text-sm mb-1.5">📍 {config.address}</p>
-                <p className="text-sm mb-1.5">🕒 {config.hours}</p>
-                <p className="text-sm">💬 WhatsApp: +{config.whatsapp}</p>
-              </div>
-              <div>
-                <h4 className="text-purple-300 font-bold text-xs uppercase tracking-wider mb-3">Redes Sociales</h4>
-                <div className="flex flex-col gap-2 text-sm">
-                  {config.instagram && <a href={config.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition">📸 Instagram</a>}
-                  {config.facebook && <a href={config.facebook} target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition">📘 Facebook Oficial</a>}
-                </div>
-              </div>
-            </div>
-            <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 border-t border-slate-800 mt-10 pt-6">
-              <p>© {new Date().getFullYear()} {config.storeName} - Catálogo Virtual</p>
-            </div>
-          </footer>
         </div>
       );
     }

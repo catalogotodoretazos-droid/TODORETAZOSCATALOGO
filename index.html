@@ -22,7 +22,6 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // --- CREDENCIALES DE FIREBASE CONFIGURADAS ---
     const firebaseConfig = {
       apiKey: "AIzaSyBscBd2y8N5raZTsrKxikyyc3v4_dW2KBo",
       authDomain: "catalogotodoretazos-e6b8f.firebaseapp.com",
@@ -53,18 +52,6 @@
         width: '1.50m',
         notes: 'Ideal para pantalones, chaquetas y delantales. Muy resistente.',
         images: ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
-      },
-      {
-        id: '2',
-        title: 'Lino Spandex Estampado',
-        category: 'Planos',
-        unit: 'metro',
-        price: 5200,
-        stock: true,
-        composition: '80% Lino / 20% Spandex',
-        width: '1.45m',
-        notes: 'Excelente caída, fresco y elastizado para mayor confort.',
-        images: ['https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&q=80&w=600']
       }
     ];
 
@@ -99,7 +86,6 @@
       const [loginPass, setLoginPass] = useState('');
       const [loginError, setLoginError] = useState('');
       const [jsonInput, setJsonInput] = useState('');
-
       const [currentSlide, setCurrentSlide] = useState(0);
 
       const [productForm, setProductForm] = useState({
@@ -146,6 +132,13 @@
         const reader = new FileReader();
         reader.onloadend = () => callback(reader.result);
         reader.readAsDataURL(file);
+      };
+
+      const saveConfigToCloud = (newConfig) => {
+        setConfig(newConfig);
+        db.collection('settings').doc('storeConfig').set(newConfig).then(() => {
+          alert('¡Configuración guardada en la nube para todos!');
+        });
       };
 
       const handleBulkJsonImport = (e) => {
@@ -291,6 +284,12 @@
                   </div>
                 )}
 
+                {config.welcomeMessage && (
+                  <div className="bg-purple-100/80 border-l-4 border-purple-700 p-4 mb-8 rounded-r-2xl shadow-xs">
+                    <p className="text-purple-950 text-sm md:text-base font-medium">{config.welcomeMessage}</p>
+                  </div>
+                )}
+
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 mb-8 flex flex-col md:flex-row gap-4 justify-between items-center">
                   <input type="text" placeholder="🔍 Buscar telas..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-1/3 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" />
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
@@ -376,8 +375,45 @@
                   </div>
                 ) : (
                   <div className="space-y-8">
+                    
+                    {/* GESTIÓN DE LOGO Y FOTOS DEL LOCAL */}
+                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-6">
+                      <div>
+                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Logo del Local</h3>
+                        <div className="flex items-center gap-4">
+                          {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="w-16 h-16 object-cover rounded-full border" />}
+                          <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => saveConfigToCloud({...config, logoUrl: base64}))} className="text-xs text-slate-500" />
+                        </div>
+                      </div>
+
+                      <hr className="border-purple-100" />
+
+                      <div>
+                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Fotos del Local Físico (Carrusel)</h3>
+                        <div className="flex flex-wrap gap-4 mb-4">
+                          {config.storeImages && config.storeImages.map((img, idx) => (
+                            <div key={idx} className="relative group">
+                              <img src={img} alt="Local" className="w-24 h-24 object-cover rounded-xl border" />
+                              <button onClick={() => {
+                                const newImgs = config.storeImages.filter((_, i) => i !== idx);
+                                saveConfigToCloud({...config, storeImages: newImgs});
+                              }} className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-6 h-6 text-xs font-bold">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => {
+                          const currentImgs = config.storeImages || [];
+                          saveConfigToCloud({...config, storeImages: [...currentImgs, base64]});
+                        })} className="text-xs text-slate-500" />
+                      </div>
+                    </div>
+
+                    {/* GESTIÓN DE CATÁLOGO */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-xl font-bold mb-3">Gestión de Catálogo Nube ({products.length})</h3>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold">Catálogo Nube ({products.length})</h3>
+                        <button onClick={resetProductForm} className="bg-purple-800 text-white px-4 py-2 rounded-xl text-xs font-bold">+ Nuevo Producto</button>
+                      </div>
                       <table className="w-full text-left border-collapse text-sm">
                         <thead>
                           <tr className="border-b text-xs text-slate-400 uppercase">
@@ -407,6 +443,7 @@
                       </table>
                     </div>
 
+                    {/* NUEVO / EDITAR PRODUCTO */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
                       <h3 className="text-xl font-bold mb-4">{productForm.id ? 'Editar Producto' : 'Nuevo Producto'}</h3>
                       <form onSubmit={handleSaveProduct} className="space-y-4 text-sm">
@@ -416,6 +453,34 @@
                         <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold">Guardar en la Nube</button>
                       </form>
                     </div>
+
+                    {/* CARGA MASIVA JSON */}
+                    <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
+                      <h3 className="text-lg font-bold mb-2">📥 Carga Masiva JSON</h3>
+                      <form onSubmit={handleBulkJsonImport} className="space-y-3">
+                        <textarea rows="3" placeholder='[{"title":"Tela X","price":1200,"unit":"metro","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border p-3 text-xs font-mono rounded-xl"></textarea>
+                        <button type="submit" className="bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold">Importar</button>
+                      </form>
+                    </div>
+
+                    {/* CONFIGURACIÓN GENERAL Y REDES */}
+                    <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
+                      <h3 className="text-lg font-bold mb-4">⚙️ Información del Local y Redes</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase">WhatsApp</label>
+                          <input type="text" value={config.whatsapp} onChange={e => setConfig({...config, whatsapp: e.target.value})} className="w-full border p-2.5 rounded-xl mt-1" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase">Dirección</label>
+                          <input type="text" value={config.address} onChange={e => setConfig({...config, address: e.target.value})} className="w-full border p-2.5 rounded-xl mt-1" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <button onClick={() => saveConfigToCloud(config)} className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold text-sm">Guardar Cambios Generales</button>
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
                 )}
               </div>

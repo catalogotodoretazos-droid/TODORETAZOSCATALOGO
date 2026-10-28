@@ -58,7 +58,7 @@
     const INITIAL_CONFIG = {
       storeName: 'Todo Retazos',
       whatsapp: '5492984123456',
-      logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=200',
+      logoUrl: '',
       description: 'Venta de telas, saldos y retazos seleccionados.',
       address: 'Yapeyú Sur 381, Villa Regina',
       hours: 'Lun a Vie: 8:30 - 12:30 / 16:00 - 19:30',
@@ -89,34 +89,27 @@
       const [currentSlide, setCurrentSlide] = useState(0);
 
       const [productForm, setProductForm] = useState({
-        id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: ['']
+        id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: []
       });
 
-      // Sincronización robusta con Firestore en tiempo real
+      // Sincronización en tiempo real con Firestore
       useEffect(() => {
-        // Cargar productos
         const unsubProducts = db.collection('products').onSnapshot(snapshot => {
           if (!snapshot.empty) {
             const prods = [];
             snapshot.forEach(doc => prods.push({ id: doc.id, ...doc.data() }));
             setProducts(prods);
           } else {
-            // Si Firestore está totalmente vacío, inicializamos con los productos por defecto
             INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p));
           }
-        }, error => {
-          console.error("Error al leer productos:", error);
         });
 
-        // Cargar configuración general del local
         const unsubConfig = db.collection('settings').doc('storeConfig').onSnapshot(doc => {
           if (doc.exists) {
             setConfig(doc.data());
           } else {
             db.collection('settings').doc('storeConfig').set(INITIAL_CONFIG);
           }
-        }, error => {
-          console.error("Error al leer configuración:", error);
         });
 
         return () => {
@@ -133,10 +126,51 @@
         return () => clearInterval(timer);
       }, [config.storeImages]);
 
+      // Función para comprimir y convertir imágenes locales a formato seguro para la nube
+      const handleImageUpload = (e, callback) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 600;
+            const MAX_HEIGHT = 600;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Comprimir a JPEG de calidad media para que entre perfecto en Firestore
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            callback(dataUrl);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
       const saveConfigToCloud = (newConfig) => {
         setConfig(newConfig);
         db.collection('settings').doc('storeConfig').set(newConfig)
-          .then(() => alert('¡Configuración guardada y sincronizada en la nube!'))
+          .then(() => alert('¡Configuración guardada en la nube para todos!'))
           .catch(err => alert('Error al guardar: ' + err.message));
       };
 
@@ -146,7 +180,7 @@
           const parsed = JSON.parse(jsonInput);
           const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
           if (list.length === 0) {
-            alert('El JSON está vacío o no es válido.');
+            alert('El JSON está vacío.');
             return;
           }
           list.forEach((p, idx) => {
@@ -166,9 +200,9 @@
             db.collection('products').doc(id).set(formatted);
           });
           setJsonInput('');
-          alert('¡Carga masiva sincronizada en la nube con éxito para todos!');
+          alert('¡Carga masiva sincronizada en la nube!');
         } catch(err) {
-          alert('Error al procesar el JSON. Revisa la sintaxis.');
+          alert('Error al procesar el JSON.');
         }
       };
 
@@ -186,7 +220,7 @@
       const handleSaveProduct = (e) => {
         e.preventDefault();
         if (!productForm.title || !productForm.price) {
-          alert('Completa al menos el título y el precio.');
+          alert('Completa el título y el precio.');
           return;
         }
         const id = productForm.id ? productForm.id : String(Date.now());
@@ -194,17 +228,15 @@
           ...productForm,
           id,
           price: parseFloat(productForm.price) || 0,
-          images: productForm.images.filter(img => img.trim() !== '').length > 0 
-            ? productForm.images.filter(img => img.trim() !== '') 
-            : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
+          images: productForm.images.length > 0 ? productForm.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
         };
 
         db.collection('products').doc(id).set(newProd)
           .then(() => {
             resetProductForm();
-            alert('¡Producto guardado y actualizado en la nube para todos!');
+            alert('¡Producto guardado y sincronizado en la nube para todos!');
           })
-          .catch(err => alert('Error al guardar producto: ' + err.message));
+          .catch(err => alert('Error al guardar: ' + err.message));
       };
 
       const handleEditProduct = (prod) => {
@@ -213,20 +245,18 @@
       };
 
       const toggleStock = (id, currentStock) => {
-        db.collection('products').doc(id).update({ stock: !currentStock })
-          .catch(err => alert('Error al actualizar stock: ' + err.message));
+        db.collection('products').doc(id).update({ stock: !currentStock });
       };
 
       const handleDeleteProduct = (id) => {
-        if (confirm('¿Estás seguro de eliminar este producto?')) {
-          db.collection('products').doc(id).delete()
-            .catch(err => alert('Error al eliminar: ' + err.message));
+        if (confirm('¿Eliminar este producto?')) {
+          db.collection('products').doc(id).delete();
         }
       };
 
       const resetProductForm = () => {
         setProductForm({
-          id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: ['']
+          id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: []
         });
       };
 
@@ -381,14 +411,13 @@
                 ) : (
                   <div className="space-y-8">
                     
-                    {/* GESTIÓN DE CONFIGURACIÓN Y LOGO */}
+                    {/* GESTIÓN DE LOGO DESDE DISPOSITIVO */}
                     <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-4">
-                      <h3 className="text-xl font-serif font-bold text-purple-950">⚙️ Configuración y Enlace de Logo</h3>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL de la Imagen del Logo</label>
-                        <input type="text" placeholder="https://ejemplo.com/logo.jpg" value={config.logoUrl} onChange={e => setConfig({...config, logoUrl: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
+                      <h3 className="text-xl font-serif font-bold text-purple-950">🖼️ Logo del Local (Desde Dispositivo)</h3>
+                      <div className="flex items-center gap-4">
+                        {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="w-16 h-16 object-cover rounded-full border shadow-sm" />}
+                        <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => saveConfigToCloud({...config, logoUrl: base64}))} className="text-xs text-slate-500" />
                       </div>
-                      <button onClick={() => saveConfigToCloud(config)} className="bg-purple-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm">Guardar Configuración General</button>
                     </div>
 
                     {/* GESTIÓN DE CATÁLOGO */}
@@ -426,13 +455,19 @@
                       </table>
                     </div>
 
-                    {/* NUEVO / EDITAR PRODUCTO */}
+                    {/* NUEVO / EDITAR PRODUCTO CON FOTO DESDE DISPOSITIVO */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
                       <h3 className="text-xl font-bold mb-4">{productForm.id ? 'Editar Producto' : 'Nuevo Producto'}</h3>
                       <form onSubmit={handleSaveProduct} className="space-y-4 text-sm">
                         <input type="text" placeholder="Título" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
                         <input type="number" placeholder="Precio ($)" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
-                        <input type="text" placeholder="URL de la Imagen (Link web)" value={productForm.images[0]} onChange={e => setProductForm({...productForm, images: [e.target.value]})} className="w-full border p-2.5 rounded-xl" />
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Foto del Producto (Desde tu Dispositivo)</label>
+                          <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => setProductForm({...productForm, images: [base64]}))} className="text-xs text-slate-500" />
+                        </div>
+                        {productForm.images[0] && (
+                          <img src={productForm.images[0]} alt="Vista previa" className="w-24 h-24 object-cover rounded-xl border" />
+                        )}
                         <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold">Guardar en la Nube</button>
                       </form>
                     </div>

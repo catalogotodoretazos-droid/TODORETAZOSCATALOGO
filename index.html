@@ -50,7 +50,7 @@
         stock: true,
         composition: '100% Algodón',
         width: '1.50m',
-        notes: 'Ideal para pantalones, chaquetas y delantales. Muy resistente.',
+        notes: 'Ideal para pantalones, chaquetas y delantales.',
         images: ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
       }
     ];
@@ -58,11 +58,11 @@
     const INITIAL_CONFIG = {
       storeName: 'Todo Retazos',
       whatsapp: '5492984123456',
-      logoUrl: '',
+      logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=200',
       description: 'Venta de telas, saldos y retazos seleccionados.',
-      address: 'Av. Rivadavia 1420, Villa Regina',
-      hours: 'Lun a Vie: 9:00 - 13:00 / 16:30 - 20:00',
-      instagram: 'https://instagram.com/todoretazos',
+      address: 'Yapeyú Sur 381, Villa Regina',
+      hours: 'Lun a Vie: 8:30 - 12:30 / 16:00 - 19:30',
+      instagram: 'https://instagram.com/todoretazos.vr25',
       facebook: 'https://facebook.com/TodoRetazosOficial',
       welcomeMessage: '✨ ¡Bienvenidos a nuestro catálogo virtual! Consultá disponibilidad y realizá tu pedido directamente por WhatsApp.',
       storeImages: [
@@ -89,27 +89,34 @@
       const [currentSlide, setCurrentSlide] = useState(0);
 
       const [productForm, setProductForm] = useState({
-        id: '', title: '', category: 'Planos', unit: 'metro', price: '', stock: true, composition: '', width: '', notes: '', images: []
+        id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: ['']
       });
 
-      // Sincronización en tiempo real con Firestore
+      // Sincronización robusta con Firestore en tiempo real
       useEffect(() => {
+        // Cargar productos
         const unsubProducts = db.collection('products').onSnapshot(snapshot => {
-          const prods = [];
-          snapshot.forEach(doc => prods.push({ id: doc.id, ...doc.data() }));
-          if (prods.length > 0) {
+          if (!snapshot.empty) {
+            const prods = [];
+            snapshot.forEach(doc => prods.push({ id: doc.id, ...doc.data() }));
             setProducts(prods);
           } else {
+            // Si Firestore está totalmente vacío, inicializamos con los productos por defecto
             INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p));
           }
+        }, error => {
+          console.error("Error al leer productos:", error);
         });
 
+        // Cargar configuración general del local
         const unsubConfig = db.collection('settings').doc('storeConfig').onSnapshot(doc => {
           if (doc.exists) {
             setConfig(doc.data());
           } else {
             db.collection('settings').doc('storeConfig').set(INITIAL_CONFIG);
           }
+        }, error => {
+          console.error("Error al leer configuración:", error);
         });
 
         return () => {
@@ -126,19 +133,11 @@
         return () => clearInterval(timer);
       }, [config.storeImages]);
 
-      const handleFileUpload = (e, callback) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = () => callback(reader.result);
-        reader.readAsDataURL(file);
-      };
-
       const saveConfigToCloud = (newConfig) => {
         setConfig(newConfig);
-        db.collection('settings').doc('storeConfig').set(newConfig).then(() => {
-          alert('¡Configuración guardada en la nube para todos!');
-        });
+        db.collection('settings').doc('storeConfig').set(newConfig)
+          .then(() => alert('¡Configuración guardada y sincronizada en la nube!'))
+          .catch(err => alert('Error al guardar: ' + err.message));
       };
 
       const handleBulkJsonImport = (e) => {
@@ -147,7 +146,7 @@
           const parsed = JSON.parse(jsonInput);
           const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
           if (list.length === 0) {
-            alert('El JSON está vacío.');
+            alert('El JSON está vacío o no es válido.');
             return;
           }
           list.forEach((p, idx) => {
@@ -156,20 +155,20 @@
               id,
               title: p.title || 'Producto',
               category: p.category || 'General',
-              unit: p.unit || 'metro',
+              unit: p.unit || 'kilo',
               price: parseFloat(p.price) || 0,
               stock: p.stock !== undefined ? Boolean(p.stock) : true,
               composition: p.composition || '',
               width: p.width || '',
               notes: p.notes || '',
-              images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
+              images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
             };
             db.collection('products').doc(id).set(formatted);
           });
           setJsonInput('');
-          alert('¡Productos importados y sincronizados en la nube!');
+          alert('¡Carga masiva sincronizada en la nube con éxito para todos!');
         } catch(err) {
-          alert('Error al procesar el JSON.');
+          alert('Error al procesar el JSON. Revisa la sintaxis.');
         }
       };
 
@@ -187,7 +186,7 @@
       const handleSaveProduct = (e) => {
         e.preventDefault();
         if (!productForm.title || !productForm.price) {
-          alert('Completa el título y el precio.');
+          alert('Completa al menos el título y el precio.');
           return;
         }
         const id = productForm.id ? productForm.id : String(Date.now());
@@ -195,13 +194,17 @@
           ...productForm,
           id,
           price: parseFloat(productForm.price) || 0,
-          images: productForm.images.length > 0 ? productForm.images : ['https://via.placeholder.com/400x300?text=Sin+Imagen']
+          images: productForm.images.filter(img => img.trim() !== '').length > 0 
+            ? productForm.images.filter(img => img.trim() !== '') 
+            : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
         };
 
-        db.collection('products').doc(id).set(newProd).then(() => {
-          resetProductForm();
-          alert('¡Guardado y sincronizado en la nube para todos!');
-        });
+        db.collection('products').doc(id).set(newProd)
+          .then(() => {
+            resetProductForm();
+            alert('¡Producto guardado y actualizado en la nube para todos!');
+          })
+          .catch(err => alert('Error al guardar producto: ' + err.message));
       };
 
       const handleEditProduct = (prod) => {
@@ -210,18 +213,20 @@
       };
 
       const toggleStock = (id, currentStock) => {
-        db.collection('products').doc(id).update({ stock: !currentStock });
+        db.collection('products').doc(id).update({ stock: !currentStock })
+          .catch(err => alert('Error al actualizar stock: ' + err.message));
       };
 
       const handleDeleteProduct = (id) => {
-        if (confirm('¿Eliminar este producto?')) {
-          db.collection('products').doc(id).delete();
+        if (confirm('¿Estás seguro de eliminar este producto?')) {
+          db.collection('products').doc(id).delete()
+            .catch(err => alert('Error al eliminar: ' + err.message));
         }
       };
 
       const resetProductForm = () => {
         setProductForm({
-          id: '', title: '', category: 'Planos', unit: 'metro', price: '', stock: true, composition: '', width: '', notes: '', images: []
+          id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: ['']
         });
       };
 
@@ -376,36 +381,14 @@
                 ) : (
                   <div className="space-y-8">
                     
-                    {/* GESTIÓN DE LOGO Y FOTOS DEL LOCAL */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-6">
+                    {/* GESTIÓN DE CONFIGURACIÓN Y LOGO */}
+                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-4">
+                      <h3 className="text-xl font-serif font-bold text-purple-950">⚙️ Configuración y Enlace de Logo</h3>
                       <div>
-                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Logo del Local</h3>
-                        <div className="flex items-center gap-4">
-                          {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="w-16 h-16 object-cover rounded-full border" />}
-                          <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => saveConfigToCloud({...config, logoUrl: base64}))} className="text-xs text-slate-500" />
-                        </div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL de la Imagen del Logo</label>
+                        <input type="text" placeholder="https://ejemplo.com/logo.jpg" value={config.logoUrl} onChange={e => setConfig({...config, logoUrl: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
                       </div>
-
-                      <hr className="border-purple-100" />
-
-                      <div>
-                        <h3 className="text-xl font-serif font-bold text-purple-950 mb-3">🖼️ Fotos del Local Físico (Carrusel)</h3>
-                        <div className="flex flex-wrap gap-4 mb-4">
-                          {config.storeImages && config.storeImages.map((img, idx) => (
-                            <div key={idx} className="relative group">
-                              <img src={img} alt="Local" className="w-24 h-24 object-cover rounded-xl border" />
-                              <button onClick={() => {
-                                const newImgs = config.storeImages.filter((_, i) => i !== idx);
-                                saveConfigToCloud({...config, storeImages: newImgs});
-                              }} className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-6 h-6 text-xs font-bold">✕</button>
-                            </div>
-                          ))}
-                        </div>
-                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => {
-                          const currentImgs = config.storeImages || [];
-                          saveConfigToCloud({...config, storeImages: [...currentImgs, base64]});
-                        })} className="text-xs text-slate-500" />
-                      </div>
+                      <button onClick={() => saveConfigToCloud(config)} className="bg-purple-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm">Guardar Configuración General</button>
                     </div>
 
                     {/* GESTIÓN DE CATÁLOGO */}
@@ -448,8 +431,8 @@
                       <h3 className="text-xl font-bold mb-4">{productForm.id ? 'Editar Producto' : 'Nuevo Producto'}</h3>
                       <form onSubmit={handleSaveProduct} className="space-y-4 text-sm">
                         <input type="text" placeholder="Título" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
-                        <input type="number" placeholder="Precio" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
-                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, base64 => setProductForm({...productForm, images: [base64]}))} className="text-xs" />
+                        <input type="number" placeholder="Precio ($)" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
+                        <input type="text" placeholder="URL de la Imagen (Link web)" value={productForm.images[0]} onChange={e => setProductForm({...productForm, images: [e.target.value]})} className="w-full border p-2.5 rounded-xl" />
                         <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold">Guardar en la Nube</button>
                       </form>
                     </div>
@@ -458,27 +441,9 @@
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
                       <h3 className="text-lg font-bold mb-2">📥 Carga Masiva JSON</h3>
                       <form onSubmit={handleBulkJsonImport} className="space-y-3">
-                        <textarea rows="3" placeholder='[{"title":"Tela X","price":1200,"unit":"metro","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border p-3 text-xs font-mono rounded-xl"></textarea>
+                        <textarea rows="3" placeholder='[{"title":"Tela X","price":1200,"unit":"kilo","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border p-3 text-xs font-mono rounded-xl"></textarea>
                         <button type="submit" className="bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold">Importar</button>
                       </form>
-                    </div>
-
-                    {/* CONFIGURACIÓN GENERAL Y REDES */}
-                    <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-lg font-bold mb-4">⚙️ Información del Local y Redes</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">WhatsApp</label>
-                          <input type="text" value={config.whatsapp} onChange={e => setConfig({...config, whatsapp: e.target.value})} className="w-full border p-2.5 rounded-xl mt-1" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase">Dirección</label>
-                          <input type="text" value={config.address} onChange={e => setConfig({...config, address: e.target.value})} className="w-full border p-2.5 rounded-xl mt-1" />
-                        </div>
-                        <div className="md:col-span-2">
-                          <button onClick={() => saveConfigToCloud(config)} className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold text-sm">Guardar Cambios Generales</button>
-                        </div>
-                      </div>
                     </div>
 
                   </div>

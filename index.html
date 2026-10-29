@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Todo Retazos - Catálogo Virtual</title>
-  
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM -->
@@ -12,9 +11,6 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <!-- Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-purple-50/40 text-slate-800 antialiased font-sans">
   <div id="root"></div>
@@ -22,57 +18,61 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyBscBd2y8N5raZTsrKxikyyc3v4_dW2KBo",
-      authDomain: "catalogotodoretazos-e6b8f.firebaseapp.com",
-      projectId: "catalogotodoretazos-e6b8f",
-      storageBucket: "catalogotodoretazos-e6b8f.firebasestorage.app",
-      messagingSenderId: "525213525334",
-      appId: "1:525213525334:web:942ed8a3c55065ce1f22f7",
-      measurementId: "G-G4NR9KKRH4"
-    };
-
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.firestore();
-
     const ADMIN_EMAIL = 'catalogotodoretazos@gmail.com';
     const ADMIN_PASS = 'Bigotes202512';
 
-    const INITIAL_PRODUCTS = [
-      {
-        id: '1',
-        title: 'Gabardina 8 Oz Algodón',
-        category: 'Gabardinas',
-        unit: 'metro',
-        price: 4500,
-        stock: true,
-        composition: '100% Algodón',
-        width: '1.50m',
-        notes: 'Ideal para pantalones, chaquetas y delantales.',
-        images: ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
-      }
-    ];
-
     const INITIAL_CONFIG = {
       storeName: 'Todo Retazos',
-      whatsapp: '5492984123456',
+      whatsapp: '5492984394469',
       logoUrl: '',
-      description: 'Venta de telas, saldos y retazos seleccionados.',
-      address: 'Yapeyú Sur 381, Villa Regina',
-      hours: 'Lun a Vie: 8:30 - 12:30 / 16:00 - 19:30',
+      description: 'Venta de telas, saldos y retazos seleccionados por kilo y metro.',
+      address: 'Yapeyú Sur 381, Villa Regina, Río Negro',
+      hours: 'Lun a vie 8:30-12:30 y 16-19:30 hs',
       instagram: 'https://instagram.com/todoretazos.vr25',
-      facebook: 'https://facebook.com/TodoRetazosOficial',
-      welcomeMessage: '✨ ¡Bienvenidos a nuestro catálogo virtual! Consultá disponibilidad y realizá tu pedido directamente por WhatsApp.',
+      welcomeMessage: '✨ ¡Bienvenidos a Todo Retazos! Consultá disponibilidad y realizá tu pedido directamente por WhatsApp.',
       storeImages: [
         'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1200'
       ]
     };
 
+    const INITIAL_PRODUCTS = [
+      {
+        id: '1',
+        title: 'Plano liso',
+        category: 'Planos',
+        unit: 'kilo',
+        price: 6000,
+        stock: true,
+        composition: 'Retazos por kilo',
+        width: 'Stock inicial: 10 kg',
+        notes: 'Incluido en franquicia Todo Retazos.',
+        images: ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
+      },
+      {
+        id: '2',
+        title: 'Gabardina Pesada',
+        category: 'Pesados',
+        unit: 'metro',
+        price: 7500,
+        stock: true,
+        composition: '100% Algodón',
+        width: '1.50m',
+        notes: 'Ideal para tapicería y camperas.',
+        images: ['https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&q=80&w=600']
+      }
+    ];
+
     function App() {
-      const [products, setProducts] = useState(INITIAL_PRODUCTS);
-      const [config, setConfig] = useState(INITIAL_CONFIG);
+      const [products, setProducts] = useState(() => {
+        const saved = localStorage.getItem('tr_products');
+        return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+      });
+
+      const [config, setConfig] = useState(() => {
+        const saved = localStorage.getItem('tr_config');
+        return saved ? JSON.parse(saved) : INITIAL_CONFIG;
+      });
+
       const [cart, setCart] = useState([]);
       const [view, setView] = useState('catalog');
       const [selectedProduct, setSelectedProduct] = useState(null);
@@ -80,8 +80,7 @@
 
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedCategory, setSelectedCategory] = useState('Todas');
-      const [selectedUnit, setSelectedUnit] = useState('Todas');
-
+      
       const [loginEmail, setLoginEmail] = useState('');
       const [loginPass, setLoginPass] = useState('');
       const [loginError, setLoginError] = useState('');
@@ -92,32 +91,16 @@
         id: '', title: '', category: 'Planos', unit: 'kilo', price: '', stock: true, composition: '', width: '', notes: '', images: []
       });
 
-      // Sincronización en tiempo real con Firestore
+      // Guardar en localStorage cada cambio para persistencia local inmediata
       useEffect(() => {
-        const unsubProducts = db.collection('products').onSnapshot(snapshot => {
-          if (!snapshot.empty) {
-            const prods = [];
-            snapshot.forEach(doc => prods.push({ id: doc.id, ...doc.data() }));
-            setProducts(prods);
-          } else {
-            INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p));
-          }
-        });
+        localStorage.setItem('tr_products', JSON.stringify(products));
+      }, [products]);
 
-        const unsubConfig = db.collection('settings').doc('storeConfig').onSnapshot(doc => {
-          if (doc.exists) {
-            setConfig(doc.data());
-          } else {
-            db.collection('settings').doc('storeConfig').set(INITIAL_CONFIG);
-          }
-        });
+      useEffect(() => {
+        localStorage.setItem('tr_config', JSON.stringify(config));
+      }, [config]);
 
-        return () => {
-          unsubProducts();
-          unsubConfig();
-        };
-      }, []);
-
+      // Carrusel automático del local
       useEffect(() => {
         if (!config.storeImages || config.storeImages.length <= 1) return;
         const timer = setInterval(() => {
@@ -126,84 +109,36 @@
         return () => clearInterval(timer);
       }, [config.storeImages]);
 
-      // Función para comprimir y convertir imágenes locales a formato seguro para la nube
+      // Compresión de imágenes desde dispositivo a Base64 optimizado
       const handleImageUpload = (e, callback) => {
         const file = e.target.files[0];
         if (!file) return;
-        
         const reader = new FileReader();
         reader.onload = (event) => {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 600;
-            const MAX_HEIGHT = 600;
+            const MAX_WIDTH = 700;
+            const MAX_HEIGHT = 700;
             let width = img.width;
             let height = img.height;
 
             if (width > height) {
-              if (width > MAX_WIDTH) {
-                height *= MAX_WIDTH / width;
-                width = MAX_WIDTH;
-              }
+              if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
             } else {
-              if (height > MAX_HEIGHT) {
-                width *= MAX_HEIGHT / height;
-                height = MAX_HEIGHT;
-              }
+              if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
             }
 
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
-            // Comprimir a JPEG de calidad media para que entre perfecto en Firestore
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
             callback(dataUrl);
           };
           img.src = event.target.result;
         };
         reader.readAsDataURL(file);
-      };
-
-      const saveConfigToCloud = (newConfig) => {
-        setConfig(newConfig);
-        db.collection('settings').doc('storeConfig').set(newConfig)
-          .then(() => alert('¡Configuración guardada en la nube para todos!'))
-          .catch(err => alert('Error al guardar: ' + err.message));
-      };
-
-      const handleBulkJsonImport = (e) => {
-        e.preventDefault();
-        try {
-          const parsed = JSON.parse(jsonInput);
-          const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
-          if (list.length === 0) {
-            alert('El JSON está vacío.');
-            return;
-          }
-          list.forEach((p, idx) => {
-            const id = String(p.id || Date.now() + idx);
-            const formatted = {
-              id,
-              title: p.title || 'Producto',
-              category: p.category || 'General',
-              unit: p.unit || 'kilo',
-              price: parseFloat(p.price) || 0,
-              stock: p.stock !== undefined ? Boolean(p.stock) : true,
-              composition: p.composition || '',
-              width: p.width || '',
-              notes: p.notes || '',
-              images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
-            };
-            db.collection('products').doc(id).set(formatted);
-          });
-          setJsonInput('');
-          alert('¡Carga masiva sincronizada en la nube!');
-        } catch(err) {
-          alert('Error al procesar el JSON.');
-        }
       };
 
       const handleLogin = (e) => {
@@ -220,23 +155,21 @@
       const handleSaveProduct = (e) => {
         e.preventDefault();
         if (!productForm.title || !productForm.price) {
-          alert('Completa el título y el precio.');
+          alert('Completa al menos el título y el precio.');
           return;
         }
         const id = productForm.id ? productForm.id : String(Date.now());
-        const newProd = {
-          ...productForm,
-          id,
-          price: parseFloat(productForm.price) || 0,
-          images: productForm.images.length > 0 ? productForm.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
-        };
+        const newImages = productForm.images.length > 0 ? productForm.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600'];
+        
+        const updatedProduct = { ...productForm, id, price: parseFloat(productForm.price) || 0, images: newImages };
 
-        db.collection('products').doc(id).set(newProd)
-          .then(() => {
-            resetProductForm();
-            alert('¡Producto guardado y sincronizado en la nube para todos!');
-          })
-          .catch(err => alert('Error al guardar: ' + err.message));
+        if (productForm.id) {
+          setProducts(products.map(p => p.id === id ? updatedProduct : p));
+        } else {
+          setProducts([updatedProduct, ...products]);
+        }
+        resetProductForm();
+        alert('¡Producto guardado con éxito!');
       };
 
       const handleEditProduct = (prod) => {
@@ -244,14 +177,14 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
-      const toggleStock = (id, currentStock) => {
-        db.collection('products').doc(id).update({ stock: !currentStock });
+      const handleDeleteProduct = (id) => {
+        if (confirm('¿Estás seguro de eliminar este producto?')) {
+          setProducts(products.filter(p => p.id !== id));
+        }
       };
 
-      const handleDeleteProduct = (id) => {
-        if (confirm('¿Eliminar este producto?')) {
-          db.collection('products').doc(id).delete();
-        }
+      const toggleStock = (id) => {
+        setProducts(products.map(p => p.id === id ? {...p, stock: !p.stock} : p));
       };
 
       const resetProductForm = () => {
@@ -260,33 +193,62 @@
         });
       };
 
+      const handleBulkJsonImport = (e) => {
+        e.preventDefault();
+        try {
+          const parsed = JSON.parse(jsonInput);
+          const list = Array.isArray(parsed) ? parsed : (parsed.products || []);
+          if (list.length === 0) {
+            alert('El JSON está vacío.');
+            return;
+          }
+          const newProds = list.map((p, idx) => ({
+            id: String(p.id || Date.now() + idx),
+            title: p.title || 'Producto',
+            category: p.category || 'General',
+            unit: p.unit || 'kilo',
+            price: parseFloat(p.price) || 0,
+            stock: p.stock !== undefined ? Boolean(p.stock) : true,
+            composition: p.composition || '',
+            width: p.width || '',
+            notes: p.notes || '',
+            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=600']
+          }));
+          setProducts([...newProds, ...products]);
+          setJsonInput('');
+          alert('¡Carga masiva importada con éxito!');
+        } catch(err) {
+          alert('Error al procesar el formato JSON.');
+        }
+      };
+
       const filteredProducts = products.filter(p => {
         const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = selectedCategory === 'Todas' || p.category === selectedCategory;
-        const matchesUnit = selectedUnit === 'Todas' || p.unit === selectedUnit;
-        return matchesSearch && matchesCategory && matchesUnit;
+        return matchesSearch && matchesCategory;
       });
 
       const categories = ['Todas', ...new Set(products.map(p => p.category))];
 
       return (
         <div className="min-h-screen flex flex-col justify-between bg-purple-50/30">
+          {/* Header */}
           <header className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-800 text-white shadow-lg sticky top-0 z-50 border-b border-purple-700/50">
             <div className="max-w-7xl mx-auto px-4 py-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-3 cursor-pointer group" onClick={() => { setView('catalog'); setSelectedProduct(null); }}>
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setView('catalog'); setSelectedProduct(null); }}>
                 {config.logoUrl ? (
                   <img src={config.logoUrl} alt="Logo" className="w-12 h-12 object-cover rounded-full border-2 border-purple-300 shadow-md" />
                 ) : (
-                  <div className="w-12 h-12 bg-purple-700/80 rounded-full flex items-center justify-center font-bold text-xl border-2 border-purple-300/80 shadow-md">TR</div>
+                  <div className="w-12 h-12 bg-purple-700 rounded-full flex items-center justify-center font-bold text-xl border-2 border-purple-300 shadow-md">TR</div>
                 )}
                 <div>
                   <h1 className="text-2xl font-serif tracking-wide">{config.storeName}</h1>
-                  <p className="text-xs text-purple-200/80 hidden sm:block">{config.description}</p>
+                  <p className="text-xs text-purple-200 hidden sm:block">{config.address}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4">
-                <button onClick={() => setView('cart')} className="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded-xl text-sm font-medium shadow-md flex items-center gap-2 transition border border-purple-500/30">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setView('cart')} className="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded-xl text-sm font-medium shadow-md flex items-center gap-2 border border-purple-500/30">
                   <span>🛒 Pedido</span>
                   {cart.length > 0 && <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cart.reduce((a, b) => a + b.quantity, 0)}</span>}
                 </button>
@@ -297,15 +259,17 @@
                     <button onClick={() => { setIsAdmin(false); setView('catalog'); }} className="bg-rose-700 hover:bg-rose-600 px-3.5 py-2 rounded-xl text-sm font-semibold">Salir</button>
                   </div>
                 ) : (
-                  <button onClick={() => setView('admin')} className="text-xs text-purple-200 hover:text-white underline">Acceso Admin</button>
+                  <button onClick={() => setView('admin')} className="text-xs text-purple-200 hover:text-white underline">Admin</button>
                 )}
               </div>
             </div>
           </header>
 
+          {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
             {view === 'catalog' && !selectedProduct && (
               <div>
+                {/* Carrusel del local */}
                 {config.storeImages && config.storeImages.length > 0 && (
                   <div className="relative w-full h-64 md:h-96 rounded-3xl overflow-hidden shadow-xl mb-8 border border-purple-200 bg-purple-950">
                     <img src={config.storeImages[currentSlide]} alt="Local" className="w-full h-full object-cover transition duration-700 ease-in-out" />
@@ -313,7 +277,7 @@
                       <div>
                         <span className="bg-purple-700 text-white text-xs font-bold px-3 py-1 rounded-full uppercase">Nuestro Local</span>
                         <h2 className="text-white font-serif text-2xl md:text-3xl font-bold mt-2">{config.storeName}</h2>
-                        <p className="text-purple-200 text-xs md:text-sm">{config.address}</p>
+                        <p className="text-purple-200 text-xs md:text-sm">{config.address} • {config.hours}</p>
                       </div>
                     </div>
                   </div>
@@ -325,8 +289,9 @@
                   </div>
                 )}
 
+                {/* Filtros y Buscador */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 mb-8 flex flex-col md:flex-row gap-4 justify-between items-center">
-                  <input type="text" placeholder="🔍 Buscar telas..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-1/3 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" />
+                  <input type="text" placeholder="🔍 Buscar telas o retazos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-1/3 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-600" />
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
                     <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="px-4 py-2.5 border border-purple-200 rounded-xl bg-white text-sm">
                       {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? 'Todas las Categorías' : c}</option>)}
@@ -334,6 +299,7 @@
                   </div>
                 </div>
 
+                {/* Grilla de Productos */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {filteredProducts.map(prod => (
                     <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-purple-100 overflow-hidden flex flex-col justify-between group">
@@ -359,108 +325,163 @@
               </div>
             )}
 
+            {/* Detalle de Producto */}
             {view === 'detail' && selectedProduct && (
               <div className="bg-white rounded-3xl shadow-md border border-purple-100 p-8 max-w-4xl mx-auto">
-                <button onClick={() => setView('catalog')} className="mb-6 text-purple-800 underline text-sm font-semibold">← Volver</button>
+                <button onClick={() => setView('catalog')} className="mb-6 text-purple-800 underline text-sm font-semibold">← Volver al catálogo</button>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                  <img src={selectedProduct.images[0]} alt="" className="w-full h-80 object-cover rounded-2xl" />
+                  <img src={selectedProduct.images[0]} alt="" className="w-full h-80 object-cover rounded-2xl shadow-sm" />
                   <div>
-                    <h2 className="text-3xl font-serif font-bold">{selectedProduct.title}</h2>
+                    <span className="bg-purple-100 text-purple-800 text-xs font-bold px-3 py-1 rounded-full uppercase">{selectedProduct.category}</span>
+                    <h2 className="text-3xl font-serif font-bold mt-2">{selectedProduct.title}</h2>
                     <p className="text-3xl font-bold text-purple-950 my-4">${selectedProduct.price} / {selectedProduct.unit}</p>
                     <p className="text-sm text-slate-600 mb-2"><strong>Composición:</strong> {selectedProduct.composition}</p>
-                    <p className="text-sm text-slate-600 mb-4"><strong>Notas:</strong> {selectedProduct.notes}</p>
-                    <button disabled={!selectedProduct.stock} onClick={() => { setCart([...cart, {product: selectedProduct, quantity: 1}]); alert('Agregado'); }} className="w-full bg-purple-800 text-white py-3.5 rounded-2xl font-bold">Agregar al Pedido</button>
+                    <p className="text-sm text-slate-600 mb-2"><strong>Ancho / Rendimiento:</strong> {selectedProduct.width}</p>
+                    <p className="text-sm text-slate-600 mb-6"><strong>Detalles:</strong> {selectedProduct.notes}</p>
+                    <button disabled={!selectedProduct.stock} onClick={() => { setCart([...cart, {product: selectedProduct, quantity: 1}]); alert('Agregado al pedido'); }} className="w-full bg-purple-800 text-white py-3.5 rounded-2xl font-bold shadow-md">Agregar al Pedido</button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Carrito / Pedido */}
             {view === 'cart' && (
               <div className="bg-white rounded-3xl shadow-md border border-purple-100 p-8 max-w-2xl mx-auto">
-                <h2 className="text-2xl font-serif font-bold mb-6">Tu Pedido</h2>
-                {cart.length === 0 ? <p className="text-slate-500">No hay productos.</p> : (
+                <h2 className="text-2xl font-serif font-bold mb-6 text-purple-950">🛒 Tu Pedido Actual</h2>
+                {cart.length === 0 ? <p className="text-slate-500">No hay productos en tu pedido.</p> : (
                   <div className="space-y-4">
                     {cart.map((item, idx) => (
-                      <div key={idx} className="flex justify-between border-b pb-2 text-sm">
-                        <span>{item.product.title} (x{item.quantity})</span>
-                        <span className="font-bold">${item.product.price * item.quantity}</span>
+                      <div key={idx} className="flex justify-between items-center border-b pb-3 text-sm">
+                        <div>
+                          <p className="font-bold">{item.product.title}</p>
+                          <p className="text-xs text-slate-500">${item.product.price} x {item.product.unit}</p>
+                        </div>
+                        <span className="font-bold text-purple-900">${item.product.price * item.quantity}</span>
                       </div>
                     ))}
                     <button onClick={() => {
                       let msg = `Hola *${config.storeName}*, quiero consultar por este pedido:\n\n`;
-                      cart.forEach((i, idx) => { msg += `${idx+1}. *${i.product.title}* - Cantidad: ${i.quantity}\n`; });
+                      cart.forEach((i, idx) => { msg += `${idx+1}. *${i.product.title}* - Precio: $${i.product.price}\n`; });
                       window.open(`https://wa.me/${config.whatsapp}?text=` + encodeURIComponent(msg), '_blank');
-                    }} className="w-full bg-emerald-600 text-white py-3.5 rounded-2xl font-bold">Enviar Pedido por WhatsApp</button>
+                    }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 rounded-2xl font-bold shadow-md transition">Enviar Pedido por WhatsApp</button>
                   </div>
                 )}
               </div>
             )}
 
+            {/* Panel de Administración */}
             {view === 'admin' && (
               <div className="max-w-5xl mx-auto space-y-8">
                 {!isAdmin ? (
                   <div className="bg-white p-8 rounded-3xl shadow-md border border-purple-100 max-w-md mx-auto">
-                    <h2 className="text-2xl font-serif font-bold mb-4 text-center">Acceso Admin</h2>
-                    {loginError && <p className="text-rose-600 text-xs mb-4">{loginError}</p>}
+                    <h2 className="text-2xl font-serif font-bold mb-4 text-center text-purple-950">Acceso Administrador</h2>
+                    {loginError && <p className="text-rose-600 text-xs mb-4 text-center font-bold">{loginError}</p>}
                     <form onSubmit={handleLogin} className="space-y-4">
                       <input type="email" placeholder="Correo" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full border p-3 rounded-xl text-sm" required />
                       <input type="password" placeholder="Contraseña" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full border p-3 rounded-xl text-sm" required />
-                      <button type="submit" className="w-full bg-purple-800 text-white py-3 rounded-xl font-bold text-sm">Entrar</button>
+                      <button type="submit" className="w-full bg-purple-800 text-white py-3 rounded-xl font-bold text-sm shadow-md">Ingresar</button>
                     </form>
                   </div>
                 ) : (
                   <div className="space-y-8">
                     
-                    {/* GESTIÓN DE LOGO DESDE DISPOSITIVO */}
+                    {/* Configuración General y Logo */}
                     <div className="bg-white p-6 md:p-8 rounded-3xl border border-purple-100 shadow-sm space-y-4">
-                      <h3 className="text-xl font-serif font-bold text-purple-950">🖼️ Logo del Local (Desde Dispositivo)</h3>
-                      <div className="flex items-center gap-4">
-                        {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="w-16 h-16 object-cover rounded-full border shadow-sm" />}
-                        <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => saveConfigToCloud({...config, logoUrl: base64}))} className="text-xs text-slate-500" />
+                      <h3 className="text-xl font-serif font-bold text-purple-950">⚙️ Configuración del Negocio</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre del Local</label>
+                          <input type="text" value={config.storeName} onChange={e => setConfig({...config, storeName: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">WhatsApp de Contacto</label>
+                          <input type="text" value={config.whatsapp} onChange={e => setConfig({...config, whatsapp: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Dirección</label>
+                          <input type="text" value={config.address} onChange={e => setConfig({...config, address: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horarios</label>
+                          <input type="text" value={config.hours} onChange={e => setConfig({...config, hours: e.target.value})} className="w-full border p-2.5 rounded-xl text-sm" />
+                        </div>
+                      </div>
+
+                      {/* Logo del Local desde dispositivo */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Logo del Local (Desde Dispositivo)</label>
+                        <div className="flex items-center gap-4">
+                          {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="w-14 h-14 object-cover rounded-full border shadow-sm" />}
+                          <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => setConfig({...config, logoUrl: base64}))} className="text-xs text-slate-500" />
+                        </div>
+                      </div>
+
+                      {/* Imágenes del Carrusel desde dispositivo */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fotos para el Carrusel del Local</label>
+                        <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => setConfig({...config, storeImages: [...(config.storeImages || []), base64]}))} className="text-xs text-slate-500 mb-2" />
+                        <div className="flex flex-wrap gap-2">
+                          {(config.storeImages || []).map((img, idx) => (
+                            <div key={idx} className="relative">
+                              <img src={img} alt="Slide" className="w-16 h-16 object-cover rounded-xl border" />
+                              <button onClick={() => setConfig({...config, storeImages: config.storeImages.filter((_, i) => i !== idx)})} className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-5 h-5 text-xs font-bold">×</button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    {/* GESTIÓN DE CATÁLOGO */}
+                    {/* Gestión de Productos */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
                       <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-bold">Catálogo Nube ({products.length})</h3>
+                        <h3 className="text-xl font-bold text-purple-950">📦 Catálogo de Productos ({products.length})</h3>
                         <button onClick={resetProductForm} className="bg-purple-800 text-white px-4 py-2 rounded-xl text-xs font-bold">+ Nuevo Producto</button>
                       </div>
-                      <table className="w-full text-left border-collapse text-sm">
-                        <thead>
-                          <tr className="border-b text-xs text-slate-400 uppercase">
-                            <th className="p-2">Título</th>
-                            <th className="p-2">Precio</th>
-                            <th className="p-2">Stock</th>
-                            <th className="p-2 text-right">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {products.map(p => (
-                            <tr key={p.id}>
-                              <td className="p-2 font-bold">{p.title}</td>
-                              <td className="p-2">${p.price}</td>
-                              <td className="p-2">
-                                <button onClick={() => toggleStock(p.id, p.stock)} className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.stock ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                  {p.stock ? 'En Stock' : 'Agotado'}
-                                </button>
-                              </td>
-                              <td className="p-2 text-right space-x-2">
-                                <button onClick={() => handleEditProduct(p)} className="text-purple-800 font-bold text-xs">Editar</button>
-                                <button onClick={() => handleDeleteProduct(p.id)} className="text-rose-600 font-bold text-xs">Eliminar</button>
-                              </td>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-sm">
+                          <thead>
+                            <tr className="border-b text-xs text-slate-400 uppercase">
+                              <th className="p-2">Título</th>
+                              <th className="p-2">Precio</th>
+                              <th className="p-2">Stock</th>
+                              <th className="p-2 text-right">Acciones</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y">
+                            {products.map(p => (
+                              <tr key={p.id}>
+                                <td className="p-2 font-bold">{p.title}</td>
+                                <td className="p-2">${p.price} / {p.unit}</td>
+                                <td className="p-2">
+                                  <button onClick={() => toggleStock(p.id)} className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.stock ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                    {p.stock ? 'En Stock' : 'Agotado'}
+                                  </button>
+                                </td>
+                                <td className="p-2 text-right space-x-2">
+                                  <button onClick={() => handleEditProduct(p)} className="text-purple-800 font-bold text-xs">Editar</button>
+                                  <button onClick={() => handleDeleteProduct(p.id)} className="text-rose-600 font-bold text-xs">Eliminar</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
 
-                    {/* NUEVO / EDITAR PRODUCTO CON FOTO DESDE DISPOSITIVO */}
+                    {/* Formulario Crear / Editar Producto */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-xl font-bold mb-4">{productForm.id ? 'Editar Producto' : 'Nuevo Producto'}</h3>
+                      <h3 className="text-xl font-bold mb-4 text-purple-950">{productForm.id ? 'Editar Producto' : 'Agregar Nuevo Producto'}</h3>
                       <form onSubmit={handleSaveProduct} className="space-y-4 text-sm">
-                        <input type="text" placeholder="Título" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
-                        <input type="number" placeholder="Precio ($)" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full border p-2.5 rounded-xl" required />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <input type="text" placeholder="Título (ej: Gabardina)" value={productForm.title} onChange={e => setProductForm({...productForm, title: e.target.value})} className="border p-2.5 rounded-xl" required />
+                          <input type="number" placeholder="Precio ($)" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="border p-2.5 rounded-xl" required />
+                          <input type="text" placeholder="Categoría" value={productForm.category} onChange={e => setProductForm({...productForm, category: e.target.value})} className="border p-2.5 rounded-xl" />
+                          <select value={productForm.unit} onChange={e => setProductForm({...productForm, unit: e.target.value})} className="border p-2.5 rounded-xl bg-white">
+                            <option value="kilo">Kilo</option>
+                            <option value="metro">Metro</option>
+                            <option value="unidad">Unidad</option>
+                          </select>
+                        </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Foto del Producto (Desde tu Dispositivo)</label>
                           <input type="file" accept="image/*" onChange={e => handleImageUpload(e, base64 => setProductForm({...productForm, images: [base64]}))} className="text-xs text-slate-500" />
@@ -468,16 +489,16 @@
                         {productForm.images[0] && (
                           <img src={productForm.images[0]} alt="Vista previa" className="w-24 h-24 object-cover rounded-xl border" />
                         )}
-                        <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold">Guardar en la Nube</button>
+                        <button type="submit" className="bg-purple-800 text-white px-6 py-2.5 rounded-xl font-bold shadow-md">Guardar Producto</button>
                       </form>
                     </div>
 
-                    {/* CARGA MASIVA JSON */}
+                    {/* Carga Masiva JSON */}
                     <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm">
-                      <h3 className="text-lg font-bold mb-2">📥 Carga Masiva JSON</h3>
+                      <h3 className="text-lg font-bold mb-2 text-purple-950">📥 Carga Masiva formato JSON</h3>
                       <form onSubmit={handleBulkJsonImport} className="space-y-3">
-                        <textarea rows="3" placeholder='[{"title":"Tela X","price":1200,"unit":"kilo","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border p-3 text-xs font-mono rounded-xl"></textarea>
-                        <button type="submit" className="bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold">Importar</button>
+                        <textarea rows="3" placeholder='[{"title":"Plano liso","price":6000,"unit":"kilo","category":"Planos"}]' value={jsonInput} onChange={e => setJsonInput(e.target.value)} className="w-full border p-3 text-xs font-mono rounded-xl"></textarea>
+                        <button type="submit" className="bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md">Importar Catálogo</button>
                       </form>
                     </div>
 
